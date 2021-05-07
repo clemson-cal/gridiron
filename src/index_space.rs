@@ -1,7 +1,6 @@
 use core::ops::Range;
 
 /// Identifier for a Cartesian axis
-/// 
 #[derive(Clone, Copy)]
 pub enum Axis {
     I,
@@ -18,7 +17,6 @@ impl Axis {
 }
 
 /// Describes a rectangular index space. The index type is signed 64-bit integer.
-/// 
 #[derive(Clone, Debug)]
 pub struct IndexSpace {
     di: Range<i64>,
@@ -26,13 +24,11 @@ pub struct IndexSpace {
 }
 
 impl IndexSpace {
-
     /// Construct a new index space from the given ranges. The ranges are
     /// allowed to be empty but this function panics if either has negative
     /// length.
-    /// 
     pub fn new(di: Range<i64>, dj: Range<i64>) -> Self {
-        assert!{
+        assert! {
             di.start <= di.end && dj.start < dj.end,
             "index space has negative volume"
         };
@@ -40,13 +36,11 @@ impl IndexSpace {
     }
 
     /// Determine whether this index space is empty.
-    /// 
     pub fn is_empty(&self) -> bool {
         self.di.is_empty() || self.dj.is_empty()
     }
 
     /// Return the number of indexes on each axis.
-    /// 
     pub fn dim(&self) -> (usize, usize) {
         (
             (self.di.end - self.di.start) as usize,
@@ -55,45 +49,38 @@ impl IndexSpace {
     }
 
     /// Return the number of elements in this index space.
-    /// 
     pub fn len(&self) -> usize {
         let (l, m) = self.dim();
         l * m
     }
 
     /// Return the minimum index (inclusive).
-    /// 
     pub fn start(&self) -> (i64, i64) {
         (self.di.start, self.dj.start)
     }
 
     /// Return the maximum index (exclusive).
-    /// 
     pub fn end(&self) -> (i64, i64) {
         (self.di.end, self.dj.end)
     }
 
     /// Return the index space as a rectangle reference (a tuple of `Range`
     /// references).
-    /// 
     pub fn to_rect_ref(&self) -> (&Range<i64>, &Range<i64>) {
         (&self.di, &self.dj)
     }
 
     /// Convert this index space as a rectangle (a tuple of `Range` objects).
-    /// 
     pub fn into_rect(self) -> (Range<i64>, Range<i64>) {
         (self.di, self.dj)
     }
 
     /// Determine whether this index space contains the given index.
-    /// 
     pub fn contains(&self, index: (i64, i64)) -> bool {
         self.di.contains(&index.0) && self.dj.contains(&index.1)
     }
 
     /// Determine whether another index space is a subset of this one.
-    /// 
     pub fn contains_space(&self, other: &Self) -> bool {
         other.di.start >= self.di.start
             && other.di.end <= self.di.end
@@ -102,7 +89,6 @@ impl IndexSpace {
     }
 
     /// Return the overlapping region between two index spaces.
-    /// 
     pub fn intersect<I: Into<Self>>(&self, other: I) -> Self {
         let other = other.into();
         let i0 = self.di.start.max(other.di.start);
@@ -114,7 +100,6 @@ impl IndexSpace {
 
     /// Extend this index space by the given number of elements on both sides
     /// of each axis.
-    /// 
     pub fn extend_all(&self, delta: i64) -> Self {
         Self::new(
             self.di.start - delta..self.di.end + delta,
@@ -124,7 +109,6 @@ impl IndexSpace {
 
     /// Extend the elements at both ends of the given axis by a certain
     /// amount.
-    /// 
     pub fn extend(&self, delta: i64, axis: Axis) -> Self {
         match axis {
             Axis::I => Self::new(self.di.start - delta..self.di.end + delta, self.dj.clone()),
@@ -134,7 +118,6 @@ impl IndexSpace {
 
     /// Extend just the lower elements of this index space by a certain amount
     /// on the given axis.
-    /// 
     pub fn extend_lower(&self, delta: i64, axis: Axis) -> Self {
         match axis {
             Axis::I => Self::new(self.di.start - delta..self.di.end, self.dj.clone()),
@@ -144,7 +127,6 @@ impl IndexSpace {
 
     /// Extend just the upper elements of this index space by a certain amount on
     /// the given axis.
-    /// 
     pub fn extend_upper(&self, delta: i64, axis: Axis) -> Self {
         match axis {
             Axis::I => Self::new(self.di.start..self.di.end + delta, self.dj.clone()),
@@ -154,34 +136,29 @@ impl IndexSpace {
 
     /// Trim this index space by the given number of elements on both sides of
     /// each axis.
-    /// 
     pub fn trim_all(&self, delta: i64) -> Self {
         self.extend_all(-delta)
     }
 
     /// Trim the elements at both ends of the given axis by a certain amount.
-    /// 
     pub fn trim(&self, delta: i64, axis: Axis) -> Self {
         self.extend(-delta, axis)
     }
 
     /// Trim just the lower elements of this index space by a certain amount on
     /// the given axis.
-    /// 
     pub fn trim_lower(&self, delta: i64, axis: Axis) -> Self {
         self.extend_lower(-delta, axis)
     }
 
     /// Trim just the upper elements of this index space by a certain amount on
     /// the given axis.
-    /// 
     pub fn trim_upper(&self, delta: i64, axis: Axis) -> Self {
         self.extend_upper(-delta, axis)
     }
 
     /// Shift this index space by some amount on the given axis. The shape is
     /// unchanged.
-    ///
     pub fn translate(&self, delta: i64, axis: Axis) -> Self {
         match axis {
             Axis::I => Self::new(self.di.start + delta..self.di.end + delta, self.dj.clone()),
@@ -190,7 +167,6 @@ impl IndexSpace {
     }
 
     /// Increase the size of this index space by the given factor.
-    /// 
     pub fn refine_by(&self, factor: u32) -> Self {
         let factor = factor as i64;
         Self::new(
@@ -200,7 +176,6 @@ impl IndexSpace {
     }
 
     /// Increase the size of this index space by the given factor.
-    /// 
     pub fn coarsen_by(&self, factor: u32) -> Self {
         let factor = factor as i64;
 
@@ -220,7 +195,6 @@ impl IndexSpace {
 
     /// Return the linear offset for the given index, in a row-major memory
     /// buffer aligned with the start of this index space.
-    /// 
     pub fn row_major_offset(&self, index: (i64, i64)) -> usize {
         let i = (index.0 - self.di.start) as usize;
         let j = (index.1 - self.dj.start) as usize;
@@ -229,7 +203,6 @@ impl IndexSpace {
     }
 
     /// Return a memory region object for a buffer mapped to this index space.
-    /// 
     pub fn memory_region(&self) -> MemoryRegion {
         let start = (0, 0);
         let count = self.dim();
@@ -243,7 +216,6 @@ impl IndexSpace {
 
     /// Return a memory region object corresponding to the selection of this
     /// index space in the buffer allocated for another one.
-    /// 
     pub fn memory_region_in(&self, parent: Self) -> MemoryRegion {
         let start = (
             (self.di.start - parent.di.start) as usize,
@@ -260,7 +232,6 @@ impl IndexSpace {
 
     /// Return an iterator which traverses the index space in row-major order
     /// (C-like; the final index increases fastest).
-    /// 
     pub fn iter(&self) -> impl Iterator<Item = (i64, i64)> + '_ {
         self.di
             .clone()
@@ -318,16 +289,12 @@ impl From<IndexSpace> for (Range<i64>, Range<i64>) {
     }
 }
 
-/**
- * Less imposing factory function to construct an IndexSpace object.
- */
+/// Less imposing factory function to construct an IndexSpace object.
 pub fn range2d(di: Range<i64>, dj: Range<i64>) -> IndexSpace {
     IndexSpace::new(di, dj)
 }
 
-/**
- * A 2D memory region within a contiguous buffer.
- */
+/// A 2D memory region within a contiguous buffer.
 #[derive(Debug)]
 pub struct MemoryRegion {
     start: (usize, usize),
@@ -374,7 +341,6 @@ impl MemoryRegion {
 }
 
 /// This is an access pattern iterator for a 3D hyperslab selection. *Experimental*.
-/// 
 pub fn iter_slice_3d_v1(
     slice: &[f64],
     start: (usize, usize, usize),
@@ -399,7 +365,6 @@ pub fn iter_slice_3d_v1(
 /// This is an access pattern iterator for a 3D hyperslab selection,
 /// equivalent to the one above but faster. Most benchmarks suggest neither is
 /// faster than a triple for-loop. *Experimental*.
-/// 
 pub fn iter_slice_3d_v2(
     slice: &[f64],
     start: (usize, usize, usize),
@@ -422,10 +387,8 @@ pub fn iter_slice_3d_v2(
         })
 }
 
-/**
- * This is yet another version of the hyperslab traversal. Benchmarks suggest
- * it's the slowest. *Experimental*.
- */
+/// This is yet another version of the hyperslab traversal. Benchmarks suggest
+/// it's the slowest. *Experimental*.
 pub fn iter_slice_3d_v3(
     slice: &[f64],
     start: (usize, usize, usize),
@@ -447,7 +410,6 @@ pub fn iter_slice_3d_v3(
     })
 }
 
-// ============================================================================
 #[cfg(test)]
 mod test {
 

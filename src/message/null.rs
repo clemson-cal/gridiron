@@ -1,3 +1,7 @@
+//! Provides a message-passing communicator that does nothing. Useful for
+//! testing and for execution strategies that require a communicator of some
+//! type.
+
 use super::comm::Communicator;
 
 pub struct NullCommunicator {}

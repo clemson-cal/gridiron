@@ -1,3 +1,5 @@
+//! Exports the `Communicator` message-passing trait.
+
 use super::util;
 
 /// Interface for a group of processes that can exchange messages over a
@@ -25,7 +27,6 @@ pub trait Communicator {
     /// Implements a binomial tree broadcast from the root node. The message
     /// buffer must be `Some` if this is the root node, and it must be `None`
     /// otherwise.
-    ///
     fn broadcast(&self, value: Option<Vec<u8>>) -> Vec<u8> {
         let r = self.rank();
         let p = self.size();
@@ -47,7 +48,6 @@ pub trait Communicator {
 
     /// Implements a binomial tree reduce. All ranks return `None` except for
     /// the root.
-    ///
     fn reduce<F>(&self, f: F, mut value: Vec<u8>) -> Option<Vec<u8>>
     where
         F: Fn(Vec<u8>, Vec<u8>) -> Vec<u8>,
@@ -71,7 +71,6 @@ pub trait Communicator {
 
     /// Implements an all-reduce (symmetric fold) operation over a commutative
     /// binary operator.
-    ///
     fn all_reduce<F>(&self, f: F, value: Vec<u8>) -> Vec<u8>
     where
         F: Fn(Vec<u8>, Vec<u8>) -> Vec<u8>,

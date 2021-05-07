@@ -1,3 +1,8 @@
+//! Provides a message-passing communicator based on TCP sockets. TCP is a
+//! connection-oriented protocol, which means that a connection must be
+//! established between the sending and receiving ends of the socket in order
+//! to read from or write to a stream.
+
 use super::comm::Communicator;
 use super::util;
 use std::io::prelude::*;
