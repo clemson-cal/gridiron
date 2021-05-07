@@ -31,7 +31,7 @@ pub enum MeshLocation {
     Node,
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 
 /// A patch is a mapping from a rectangular subset of a high-resolution index
 /// space (HRIS), to associated field values. The mapping is backed by an
