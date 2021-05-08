@@ -1,14 +1,11 @@
 use clap::{AppSettings, Clap};
-use gridiron::automaton;
-use gridiron::automaton::{Automaton, Coder};
+use gridiron::automaton::{self, Automaton, Coder};
 use gridiron::hydro::euler2d::Primitive;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::comm::Communicator;
-use gridiron::message::null::NullCommunicator;
+use gridiron::message::{comm::Communicator, null::NullCommunicator};
 use gridiron::patch::Patch;
-use gridiron::rect_map::Rectangle;
-use gridiron::rect_map::RectangleMap;
+use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 use std::collections::HashMap;
 
@@ -63,18 +60,32 @@ impl State {
     }
 }
 
-struct ThisCoder {}
+struct CborCoder<A> {
+    phantom: std::marker::PhantomData<A>,
+}
 
-impl Coder for ThisCoder {
-    type Type = (
-        <PatchUpdate as Automaton>::Key,
-        <PatchUpdate as Automaton>::Message,
-    );
+impl<A> CborCoder<A> {
+    fn new() -> Self {
+        Self {
+            phantom: std::marker::PhantomData::<A> {},
+        }
+    }
+}
+
+impl<A, K, M> Coder for CborCoder<A>
+where
+    A: Automaton<Key = K, Message = M>,
+    K: serde::Serialize + serde::Deserialize<'static>,
+    M: serde::Serialize + serde::Deserialize<'static>,
+{
+    type Type = (K, M);
+
     fn encode(&self, inst: Self::Type) -> Vec<u8> {
         let mut buffer = Vec::new();
         ciborium::ser::into_writer(&inst, &mut buffer).unwrap();
         buffer
     }
+
     fn decode(&self, data: Vec<u8>) -> Self::Type {
         ciborium::de::from_reader(data.as_slice()).unwrap()
     }
@@ -131,7 +142,7 @@ fn main() {
     println!("{:?}", opts);
 
     let comm = NullCommunicator {};
-    let code = ThisCoder {};
+    let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
         size: (opts.grid_resolution, opts.grid_resolution),
