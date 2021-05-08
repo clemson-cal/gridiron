@@ -6,12 +6,6 @@ use super::comm::Communicator;
 
 pub struct NullCommunicator {}
 
-impl NullCommunicator {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 impl Communicator for NullCommunicator {
     fn rank(&self) -> usize {
         0

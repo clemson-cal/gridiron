@@ -1,13 +1,16 @@
+use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::ops::Range;
+use std::thread;
 use clap::{AppSettings, Clap};
 use gridiron::automaton::{self, Automaton, Coder};
 use gridiron::hydro::euler2d::Primitive;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, null::NullCommunicator};
+use gridiron::message::{tcp::TcpCommunicator, comm::Communicator};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
-use std::collections::HashMap;
 
 /// The initial model
 struct Model {}
@@ -101,6 +104,10 @@ fn work_assignment(
     let nj = mesh.size.1 as i64 / bs;
     let blocks_per_peer = (ni * nj) as usize / comm.size();
 
+    if (ni * nj) as usize % comm.size() != 0 {
+        panic!("the number of peers must divide the number of tasks");
+    }
+
     range2d(0..ni, 0..nj)
         .iter()
         .map(|(i, j)| (i * bs..(i + 1) * bs, j * bs..(j + 1) * bs))
@@ -109,21 +116,10 @@ fn work_assignment(
         .collect()
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Clone, Clap)]
 #[clap(version = "1.0", author = "J. Zrake <jzrake@clemson.edu>")]
 #[clap(setting = AppSettings::ColoredHelp)]
 struct Opts {
-    #[clap(short = 't', long, default_value = "1")]
-    num_threads: usize,
-
-    #[clap(
-        short = 's',
-        long,
-        default_value = "serial",
-        about = "serial|stupid|rayon"
-    )]
-    strategy: String,
-
     #[clap(short = 'n', long, default_value = "1000")]
     grid_resolution: usize,
 
@@ -137,11 +133,8 @@ struct Opts {
     tfinal: f64,
 }
 
-fn main() {
-    let opts = Opts::parse();
-    println!("{:?}", opts);
+fn run<C: Communicator>(opts: Opts, comm: C) {
 
-    let comm = NullCommunicator {};
     let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
@@ -162,19 +155,12 @@ fn main() {
     let edge_list = primitive_map.adjacency_list(1);
     let primitive: Vec<_> = primitive_map.into_iter().map(|(_, prim)| prim).collect();
 
-    println!("num blocks .... {}", primitive.len());
-    println!("num threads ... {}", opts.num_threads);
-    println!("");
+    println!("rank {} working on {} blocks", comm.rank(), primitive.len());
 
     let mut task_list: Vec<_> = primitive
         .into_iter()
         .map(|patch| PatchUpdate::new(patch, mesh.clone(), dt, None, &edge_list))
         .collect();
-
-    if opts.grid_resolution % opts.block_size != 0 {
-        eprintln!("Error: block size must divide the grid resolution");
-        return;
-    }
 
     while time < opts.tfinal {
         let start = std::time::Instant::now();
@@ -184,23 +170,24 @@ fn main() {
             iteration += 1;
             time += dt;
         }
-
         let step_seconds = start.elapsed().as_secs_f64() / opts.fold as f64;
         let mzps = mesh.total_zones() as f64 / 1e6 / step_seconds;
 
-        println!(
-            "[{}] t={:.3} Mzps={:.2} ({:.2}-thread)",
-            iteration,
-            time,
-            mzps,
-            mzps / opts.num_threads as f64
-        );
+        if comm.rank() == 0 {
+            println!{
+                "[{}] t={:.3} Mzps={:.2}",
+                iteration,
+                time,
+                mzps,
+            };
+        }
     }
 
     let primitive = task_list
         .into_iter()
         .map(|block| block.primitive())
         .collect();
+
     let state = State {
         iteration,
         time,
@@ -210,4 +197,38 @@ fn main() {
     let file = std::fs::File::create(format! {"state.{:04}.cbor", comm.rank()}).unwrap();
     let mut buffer = std::io::BufWriter::new(file);
     ciborium::ser::into_writer(&state, &mut buffer).unwrap();
+}
+
+fn peer(rank: usize) -> SocketAddr {
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000 + rank as u16)
+}
+
+fn main() {
+    let opts = Opts::parse();
+    println!("{:?}", opts);
+
+    if opts.grid_resolution % opts.block_size != 0 {
+        eprintln!("Error: block size must divide the grid resolution");
+        return;
+    }
+
+    let ranks: Range<usize> = 0..10;
+    let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
+    let comms: Vec<_> = ranks
+        .clone()
+        .map(|rank| TcpCommunicator::new(rank, peers.clone()))
+        .collect();
+    let procs: Vec<_> = comms
+        .into_iter()
+        .map(|comm| {
+            let opts = opts.clone();
+            thread::spawn(move || {
+                run(opts, comm)
+            })
+        })
+        .collect();
+
+    for process in procs {
+        process.join().unwrap()
+    }
 }
