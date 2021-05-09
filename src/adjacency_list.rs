@@ -1,48 +1,31 @@
-use std::collections::HashMap;
 use core::hash::Hash;
+use std::collections::HashMap;
 
-
-
-
-/**
- * A minimal directed graph structure that stores only edges
- */
+/// A minimal directed graph structure that stores only edges
 pub struct AdjacencyList<K> {
     outgoing: HashMap<K, Vec<K>>,
     incoming: HashMap<K, Vec<K>>,
 }
 
-
-
-
-// ============================================================================
-impl<K> AdjacencyList<K> where K: Hash + Eq + Clone {
-
-
+impl<K> AdjacencyList<K>
+where
+    K: Hash + Eq + Clone,
+{
     pub fn new() -> Self {
         Self::default()
     }
 
-
-    /**
-     * Return the number of edges in the graph.
-     */
+    /// Return the number of edges in the graph.
     pub fn len(&self) -> usize {
         self.incoming.iter().map(|(_, edges)| edges.len()).sum()
     }
 
-
-    /**
-     * Determine whether there are any edges in the graph.
-     */
+    /// Determine whether there are any edges in the graph.
     pub fn is_empty(&self) -> bool {
-    	self.incoming.iter().all(|(_, edges)| edges.is_empty())
+        self.incoming.iter().all(|(_, edges)| edges.is_empty())
     }
 
-
-    /**
-     * Insert an edge from a -> b. Duplicate and circular edges are allowed.
-     */
+    /// Insert an edge from a -> b. Duplicate and circular edges are allowed.
     pub fn insert(&mut self, a0: K, b0: K) {
         let a1 = a0.clone();
         let b1 = b0.clone();
@@ -50,10 +33,7 @@ impl<K> AdjacencyList<K> where K: Hash + Eq + Clone {
         self.incoming.entry(b1).or_default().push(a1);
     }
 
-
-    /**
-     * Determine whether the given edge exists.
-     */
+    /// Determine whether the given edge exists.
     pub fn contains(&mut self, a: &K, b: &K) -> bool {
         self.outgoing
             .get(a)
@@ -61,33 +41,34 @@ impl<K> AdjacencyList<K> where K: Hash + Eq + Clone {
             .is_some()
     }
 
-
-    /**
-     * Remove an edge if it exists.
-     */
+    /// Remove an edge if it exists.
     pub fn remove(&mut self, a0: K, b0: K) {
         let a1 = a0.clone();
         let b1 = b0.clone();
-        self.outgoing.entry(a0).and_modify(|edges| edges.retain(|k| k != &b0));
-        self.incoming.entry(b1).and_modify(|edges| edges.retain(|k| k != &a1));
+        self.outgoing
+            .entry(a0)
+            .and_modify(|edges| edges.retain(|k| k != &b0));
+        self.incoming
+            .entry(b1)
+            .and_modify(|edges| edges.retain(|k| k != &a1));
     }
 
-
-    /**
-     * Return an iterator over the vertices with edges emanating from the given
-     * vertex.
-     */
+    /// Return an iterator over the vertices with edges emanating from the given
+    /// vertex.
     pub fn outgoing_edges(&self, a: &K) -> impl Iterator<Item = &K> {
-        self.outgoing.get(a).into_iter().flat_map(|edges| edges.iter())
+        self.outgoing
+            .get(a)
+            .into_iter()
+            .flat_map(|edges| edges.iter())
     }
 
-
-    /**
-     * Return an iterator over the vertices with edges pointing to the given
-     * vertex.
-     */
+    /// Return an iterator over the vertices with edges pointing to the given
+    /// vertex.
     pub fn incoming_edges(&self, b: &K) -> impl Iterator<Item = &K> {
-        self.incoming.get(b).into_iter().flat_map(|edges| edges.iter())
+        self.incoming
+            .get(b)
+            .into_iter()
+            .flat_map(|edges| edges.iter())
     }
 }
 
@@ -100,15 +81,9 @@ impl<K> Default for AdjacencyList<K> {
     }
 }
 
-
-
-
-// ============================================================================
 #[cfg(test)]
 mod test {
-
     use super::AdjacencyList;
-
 
     #[test]
     fn graph_contained_works() {
@@ -117,7 +92,6 @@ mod test {
         assert!(edges.contains(&0, &1));
         assert!(!edges.contains(&1, &0));
     }
-
 
     #[test]
     fn graph_has_the_correct_length() {
@@ -129,7 +103,6 @@ mod test {
         assert_eq!(edges.len(), 4);
     }
 
-
     #[test]
     fn graph_can_remove_edge() {
         let mut edges = AdjacencyList::new();
@@ -140,7 +113,6 @@ mod test {
         assert!(!edges.contains(&1, &0));
         assert_eq!(edges.len(), 1);
     }
-
 
     #[test]
     fn graph_can_iterate_incoming_and_outgoing_edges() {

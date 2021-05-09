@@ -53,7 +53,6 @@ where
 
 #[cfg(test)]
 mod test {
-
     use super::Overlap;
 
     #[test]
