@@ -6,6 +6,12 @@ use super::comm::Communicator;
 
 pub struct NullCommunicator {}
 
+impl NullCommunicator {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl Communicator for NullCommunicator {
     fn rank(&self) -> usize {
         0
@@ -21,5 +27,11 @@ impl Communicator for NullCommunicator {
 
     fn recv(&self) -> Vec<u8> {
         unimplemented!("cannot recv on a null communicator")
+    }
+}
+
+impl Default for NullCommunicator {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -48,6 +48,7 @@
 pub mod adjacency_list;
 pub mod aug_node;
 pub mod automaton;
+pub mod coder;
 pub mod hydro;
 pub mod index_space;
 pub mod interval_map;

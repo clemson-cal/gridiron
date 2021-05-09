@@ -2,6 +2,7 @@ use core::hash::Hash;
 use std::collections::hash_map::{Entry, HashMap};
 use crate::message::comm::Communicator;
 use crate::message::null::NullCommunicator;
+use crate::coder::{Coder, NullCoder};
 
 /// Returned by [`Automaton::receive`] to indicate whether a task is eligible
 /// to be evaluated.
@@ -23,35 +24,6 @@ impl Status {
             Self::Eligible => true,
             Self::Ineligible => false,
         }
-    }
-}
-
-/// An object that can encode and decode to and from a `Vec<u8>`. The implementation
-/// can be `serde` or anything else.
-pub trait Coder {
-    type Type;
-    fn encode(&self, inst: Self::Type) -> Vec<u8>;
-    fn decode(&self, data: Vec<u8>) -> Self::Type;
-}
-
-/// Shim implementation of `Coder`, used internally for shared-memory
-/// parallel executions.
-struct NullCoder<A> {
-    phantom: std::marker::PhantomData<A>,
-}
-
-impl<A, K, M> Coder for NullCoder<A>
-where
-    A: Automaton<Key = K, Message = M>
-{
-    type Type = (K, M);
-
-    fn encode(&self, _: Self::Type) -> Vec<u8> {
-        unimplemented!()
-    }
-
-    fn decode(&self, _: Vec<u8>) -> Self::Type {
-        unimplemented!()
     }
 }
 
@@ -113,15 +85,15 @@ pub trait Automaton {
 }
 
 /// Execute a group of tasks in serial.
-pub fn execute<I, A, K, V>(flow: I) -> impl Iterator<Item = V>
+pub fn execute<I, A, K, V, M>(flow: I) -> impl Iterator<Item = V>
 where
     I: IntoIterator<Item = A>,
-    A: Automaton<Key = K, Value = V>,
+    A: Automaton<Key = K, Value = V, Message = M>,
     K: Hash + Eq,
 {
     let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
     let comm = NullCommunicator {};
-    let code = NullCoder { phantom: std::marker::PhantomData::<A> {} };
+    let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
     let sink = |a: A| eligible_sink.send(a).unwrap();
     coordinate(flow, &comm, &code, work, sink);
@@ -134,10 +106,10 @@ where
 /// receiving a message are spawned into the Rayon thread pool. This function
 /// returns as soon as the input iterator is exhausted. The output iterator
 /// will then yield results until all the tasks have completed in the pool.
-pub fn execute_par<'a, I, A, K, V>(scope: &rayon::ScopeFifo<'a>, flow: I) -> impl Iterator<Item = V>
+pub fn execute_par<'a, I, A, K, V, M>(scope: &rayon::ScopeFifo<'a>, flow: I) -> impl Iterator<Item = V>
 where
     I: IntoIterator<Item = A>,
-    A: Send + Automaton<Key = K, Value = V> + 'a,
+    A: Send + Automaton<Key = K, Value = V, Message = M> + 'a,
     K: Hash + Eq,
     V: Send + 'a,
 {
@@ -147,7 +119,7 @@ where
     };
     let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
     let comm = NullCommunicator {};
-    let code = NullCoder { phantom: std::marker::PhantomData::<A> {} };
+    let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
     let sink = |a: A| {
         let eligible_sink = eligible_sink.clone();
@@ -160,13 +132,13 @@ where
 }
 
 /// Execute a group of tasks in parallel using `gridiron`'s stupid scheduler.
-pub fn execute_par_stupid<I, A, K, V>(
+pub fn execute_par_stupid<I, A, K, V, M>(
     pool: &crate::thread_pool::ThreadPool,
     flow: I,
 ) -> impl Iterator<Item = V>
 where
     I: IntoIterator<Item = A>,
-    A: 'static + Send + Automaton<Key = K, Value = V>,
+    A: 'static + Send + Automaton<Key = K, Value = V, Message = M>,
     K: 'static + Hash + Eq,
     V: 'static + Send,
 {
@@ -176,7 +148,7 @@ where
     };
     let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
     let comm = NullCommunicator {};
-    let code = NullCoder { phantom: std::marker::PhantomData::<A> {} };
+    let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
     let sink = |a: A| {
         let eligible_sink = eligible_sink.clone();
