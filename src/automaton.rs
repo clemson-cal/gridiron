@@ -1,6 +1,7 @@
 use core::hash::Hash;
 use std::collections::hash_map::{Entry, HashMap};
 use crate::message::comm::Communicator;
+use crate::message::null::NullCommunicator;
 
 /// Returned by [`Automaton::receive`] to indicate whether a task is eligible
 /// to be evaluated.
@@ -31,6 +32,27 @@ pub trait Coder {
     type Type;
     fn encode(&self, inst: Self::Type) -> Vec<u8>;
     fn decode(&self, data: Vec<u8>) -> Self::Type;
+}
+
+/// Shim implementation of `Coder`, used internally for shared-memory
+/// parallel executions.
+struct NullCoder<A> {
+    phantom: std::marker::PhantomData<A>,
+}
+
+impl<A, K, M> Coder for NullCoder<A>
+where
+    A: Automaton<Key = K, Message = M>
+{
+    type Type = (K, M);
+
+    fn encode(&self, _: Self::Type) -> Vec<u8> {
+        unimplemented!()
+    }
+
+    fn decode(&self, _: Vec<u8>) -> Self::Type {
+        unimplemented!()
+    }
 }
 
 /// An agent in a group of compute tasks that can communicate with its peers,
@@ -91,17 +113,18 @@ pub trait Automaton {
 }
 
 /// Execute a group of tasks in serial.
-///
-pub fn execute<I, A, K, V>(stage: I) -> impl Iterator<Item = V>
+pub fn execute<I, A, K, V>(flow: I) -> impl Iterator<Item = V>
 where
     I: IntoIterator<Item = A>,
     A: Automaton<Key = K, Value = V>,
     K: Hash + Eq,
 {
     let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
-
-    coordinate(stage, |a: A| eligible_sink.send(a).unwrap());
-
+    let comm = NullCommunicator {};
+    let code = NullCoder { phantom: std::marker::PhantomData::<A> {} };
+    let work = |_: &K| 0;
+    let sink = |a: A| eligible_sink.send(a).unwrap();
+    coordinate(flow, &comm, &code, work, sink);
     eligible_source.into_iter().map(|peer: A| peer.value())
 }
 
@@ -122,16 +145,18 @@ where
         rayon::current_num_threads() >= 2,
         "automaton::execute_par requires the Rayon pool to be running at least two threads"
     };
-
-    let (sink, source) = crossbeam_channel::unbounded();
-
-    coordinate(flow, |a: A| {
-        let sink = sink.clone();
+    let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
+    let comm = NullCommunicator {};
+    let code = NullCoder { phantom: std::marker::PhantomData::<A> {} };
+    let work = |_: &K| 0;
+    let sink = |a: A| {
+        let eligible_sink = eligible_sink.clone();
         scope.spawn_fifo(move |_| {
-            sink.send(a.value()).unwrap();
+            eligible_sink.send(a.value()).unwrap();
         })
-    });
-    source.into_iter()
+    };
+    coordinate(flow, &comm, &code, work, sink);
+    eligible_source.into_iter()
 }
 
 /// Execute a group of tasks in parallel using `gridiron`'s stupid scheduler.
@@ -149,24 +174,57 @@ where
         pool.num_threads() >= 2,
         "automaton::execute_par_stupid requires the thread pool to be running at least two threads"
     };
-
-    let (sink, source) = crossbeam_channel::unbounded();
-
-    coordinate(flow, |a: A| {
-        let sink = sink.clone();
+    let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
+    let comm = NullCommunicator {};
+    let code = NullCoder { phantom: std::marker::PhantomData::<A> {} };
+    let work = |_: &K| 0;
+    let sink = |a: A| {
+        let eligible_sink = eligible_sink.clone();
         pool.spawn_on(a.worker_hint(), move || {
-            sink.send(a.value()).unwrap();
+            eligible_sink.send(a.value()).unwrap();
         });
-    });
-    source.into_iter()
+    };
+    coordinate(flow, &comm, &code, work, sink);
+    eligible_source.into_iter()
 }
 
-fn coordinate<I, A, K, V, S>(flow: I, sink: S)
+/// Execute a group of compute tasks using a single-threaded strategy and a
+/// distributed communicator.
+#[allow(unused)]
+pub fn execute_dist<Comm, Code, I, A, K, V>(
+    comm: &Comm,
+    code: &Code,
+    work: &HashMap<K, usize>,
+    flow: I,
+) -> impl Iterator<Item = V>
 where
+    Comm: Communicator,
+    Code: Coder<Type = (A::Key, A::Message)>,
     I: IntoIterator<Item = A>,
     A: Automaton<Key = K, Value = V>,
     K: Hash + Eq,
-    S: Fn(A),
+{
+    let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
+    let work = |k: &K| work[k];
+    let sink = |a: A| eligible_sink.send(a.value()).unwrap();
+    coordinate(flow, comm, code, work, sink);
+    eligible_source.into_iter()
+}
+
+fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
+    flow: I,
+    comm: &Comm,
+    code: &Code,
+    work: Work,
+    sink: Sink)
+where
+    Comm: Communicator,
+    Code: Coder<Type = (A::Key, A::Message)>,
+    Work: Fn(&K) -> usize,
+    Sink: Fn(A),
+    I: IntoIterator<Item = A>,
+    A: Automaton<Key = K, Value = V>,
+    K: Hash + Eq,
 {
     let mut seen: HashMap<K, A> = HashMap::new();
     let mut undelivered = HashMap::new();
@@ -179,18 +237,22 @@ where
         // If any of the recipient peers became eligible upon receiving a
         // message, then send those peers off to be executed.
         for (dest, data) in a.messages() {
-            match seen.entry(dest) {
-                Entry::Occupied(mut entry) => {
-                    if let Status::Eligible = entry.get_mut().receive(data) {
-                        sink(entry.remove())
+            if work(&dest) == comm.rank() {            
+                match seen.entry(dest) {
+                    Entry::Occupied(mut entry) => {
+                        if let Status::Eligible = entry.get_mut().receive(data) {
+                            sink(entry.remove())
+                        }
+                    }
+                    Entry::Vacant(none) => {
+                        undelivered
+                            .entry(none.into_key())
+                            .or_insert_with(Vec::new)
+                            .push(data);
                     }
                 }
-                Entry::Vacant(none) => {
-                    undelivered
-                        .entry(none.into_key())
-                        .or_insert_with(Vec::new)
-                        .push(data);
-                }
+            } else {
+                comm.send(work(&dest), code.encode((dest, data)))
             }
         }
 
@@ -209,70 +271,6 @@ where
             seen.insert(a.key(), a);
         }
     }
-    assert_eq!(seen.len(), 0);
-}
-
-/// Execute a group of compute tasks using a single-threaded strategy and a
-/// distributed communicator.
-pub fn execute_dist<Comm, Code, I, A, K, V>(
-    comm: &Comm,
-    code: &Code,
-    work: &HashMap<K, usize>,
-    flow: I,
-) -> Vec<V>
-where
-    Comm: Communicator,
-    Code: Coder<Type = (A::Key, A::Message)>,
-    I: IntoIterator<Item = A>,
-    A: Automaton<Key = K, Value = V>,
-    K: Hash + Eq,
-{
-    let mut seen: HashMap<K, A> = HashMap::new();
-    let mut undelivered = HashMap::new();
-    let mut result = Vec::new();
-
-    for mut a in flow {
-        // For each of A's messages, either deliver it to the recipient peer,
-        // if the peer has already been seen, or otherwise put it in the
-        // undelivered box.
-        //
-        // If any of the recipient peers became eligible upon receiving a
-        // message, then send those peers off to be executed.
-        for (dest, data) in a.messages() {
-            if work[&dest] == comm.rank() {            
-                match seen.entry(dest) {
-                    Entry::Occupied(mut entry) => {
-                        if let Status::Eligible = entry.get_mut().receive(data) {
-                            result.push(entry.remove().value())
-                        }
-                    }
-                    Entry::Vacant(none) => {
-                        undelivered
-                            .entry(none.into_key())
-                            .or_insert_with(Vec::new)
-                            .push(data);
-                    }
-                }
-            } else {
-                comm.send(work[&dest], code.encode((dest, data)))
-            }
-        }
-
-        // Deliver any messages addressed to A that had arrived previously. If
-        // A is eligible after receiving its messages, then send it off to be
-        // executed. Otherwise mark it as seen and process the next automaton.
-        let eligible = undelivered
-            .remove_entry(&a.key())
-            .map_or(false, |(_, messages)| {
-                messages.into_iter().any(|m| a.receive(m).is_eligible())
-            });
-
-        if eligible {
-            result.push(a.value())
-        } else {
-            seen.insert(a.key(), a);
-        }
-    }
 
     // Receive messages from peers until all tasks have been evaluated.
     while !seen.is_empty() {
@@ -280,7 +278,7 @@ where
         match seen.entry(dest) {
             Entry::Occupied(mut entry) => {
                 if let Status::Eligible = entry.get_mut().receive(data) {
-                    result.push(entry.remove().value())
+                    sink(entry.remove())
                 }
             }
             Entry::Vacant(_) => {
@@ -288,5 +286,4 @@ where
             }
         }
     }
-    result
 }

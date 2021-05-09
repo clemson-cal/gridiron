@@ -166,7 +166,7 @@ fn run<C: Communicator>(opts: Opts, comm: C) {
         let start = std::time::Instant::now();
 
         for _ in 0..opts.fold {
-            task_list = automaton::execute_dist(&comm, &code, &work, task_list);
+            task_list = automaton::execute_dist(&comm, &code, &work, task_list).collect();
             iteration += 1;
             time += dt;
         }
