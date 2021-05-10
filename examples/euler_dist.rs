@@ -1,17 +1,17 @@
+use clap::{AppSettings, Clap};
+use gridiron::automaton::{self, Automaton};
+use gridiron::coder::Coder;
+use gridiron::hydro::euler2d::Primitive;
+use gridiron::index_space::range2d;
+use gridiron::meshing::GraphTopology;
+use gridiron::message::{comm::Communicator, tcp::TcpCommunicator};
+use gridiron::patch::Patch;
+use gridiron::rect_map::{Rectangle, RectangleMap};
+use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Range;
 use std::thread;
-use clap::{AppSettings, Clap};
-use gridiron::coder::Coder;
-use gridiron::automaton::{self, Automaton};
-use gridiron::hydro::euler2d::Primitive;
-use gridiron::index_space::range2d;
-use gridiron::meshing::GraphTopology;
-use gridiron::message::{tcp::TcpCommunicator, comm::Communicator};
-use gridiron::patch::Patch;
-use gridiron::rect_map::{Rectangle, RectangleMap};
-use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 
 /// The initial model
 struct Model {}
@@ -135,7 +135,6 @@ struct Opts {
 }
 
 fn run<C: Communicator>(opts: Opts, comm: C) {
-
     let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
@@ -175,7 +174,7 @@ fn run<C: Communicator>(opts: Opts, comm: C) {
         let mzps = mesh.total_zones() as f64 / 1e6 / step_seconds;
 
         if comm.rank() == 0 {
-            println!{
+            println! {
                 "[{}] t={:.3} Mzps={:.2}",
                 iteration,
                 time,
@@ -223,9 +222,7 @@ fn main() {
         .into_iter()
         .map(|comm| {
             let opts = opts.clone();
-            thread::spawn(move || {
-                run(opts, comm)
-            })
+            thread::spawn(|| run(opts, comm))
         })
         .collect();
 
