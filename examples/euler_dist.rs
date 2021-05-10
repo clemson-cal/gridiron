@@ -40,8 +40,6 @@ struct State {
 impl State {
     fn new(
         mesh: &Mesh,
-        work: &HashMap<Rectangle<i64>, usize>,
-        comm: &impl Communicator,
         bs: usize,
     ) -> Self {
         let bs = bs as i64;
@@ -52,7 +50,6 @@ impl State {
         let primitive = range2d(0..ni, 0..nj)
             .iter()
             .map(|(i, j)| (i * bs..(i + 1) * bs, j * bs..(j + 1) * bs))
-            .filter(|rect| work[rect] == comm.rank())
             .map(|rect| Patch::from_vector_function(0, rect, initial_data))
             .collect();
 
@@ -145,7 +142,7 @@ fn run<C: Communicator>(opts: Opts, comm: C) {
         mut iteration,
         mut time,
         primitive,
-    } = State::new(&mesh, &work, &comm, opts.block_size);
+    } = State::new(&mesh, opts.block_size);
 
     let primitive_map: RectangleMap<_, _> = primitive
         .into_iter()
@@ -155,12 +152,13 @@ fn run<C: Communicator>(opts: Opts, comm: C) {
     let edge_list = primitive_map.adjacency_list(1);
     let primitive: Vec<_> = primitive_map.into_iter().map(|(_, prim)| prim).collect();
 
-    println!("rank {} working on {} blocks", comm.rank(), primitive.len());
-
     let mut task_list: Vec<_> = primitive
         .into_iter()
+        .filter(|patch| work[&patch.high_resolution_rect()] == comm.rank())
         .map(|patch| PatchUpdate::new(patch, mesh.clone(), dt, None, &edge_list))
         .collect();
+
+    println!("rank {} working on {} blocks", comm.rank(), task_list.len());
 
     while time < opts.tfinal {
         let start = std::time::Instant::now();
@@ -212,7 +210,7 @@ fn main() {
         return;
     }
 
-    let ranks: Range<usize> = 0..10;
+    let ranks: Range<usize> = 0..2;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
     let comms: Vec<_> = ranks
         .clone()
