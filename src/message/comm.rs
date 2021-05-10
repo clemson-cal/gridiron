@@ -3,9 +3,8 @@
 use super::util;
 
 /// Interface for a group of processes that can exchange messages over a
-/// network. The underlying transport can in principle be TCP, UDP, or a
-/// higher level abstraction like MPI.
-///
+/// network. The underlying transport can in principle be TCP, UDP, or another
+/// abstraction layer like MPI.
 pub trait Communicator {
     /// Must be implemented to return the rank of this process within the
     /// communicator.

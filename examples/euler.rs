@@ -8,7 +8,6 @@ use gridiron::rect_map::RectangleMap;
 use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 
 /// The initial model
-///
 struct Model {}
 
 impl Model {
@@ -25,7 +24,6 @@ impl Model {
 }
 
 /// The simulation solution state
-///
 #[derive(serde::Serialize)]
 struct State {
     time: f64,

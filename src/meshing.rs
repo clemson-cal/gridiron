@@ -1,7 +1,7 @@
-//! Utility functions for filling guard regions of patches, and creating
-//! adjacency lists describing the patch overlaps. Adjacency lists are used to
-//! establish the flow of data in parallel executions based on
-//! message-passing.
+//! Functions for filling guard zone regions and creating adjacency lists.
+//! 
+//! Adjacency lists are used to establish the flow of data in parallel
+//! executions based on message-passing.
 
 use crate::adjacency_list::AdjacencyList;
 use crate::index_space::IndexSpace;

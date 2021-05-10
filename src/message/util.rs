@@ -1,3 +1,5 @@
+//! Utility functions intended for use within the [`crate::message`] module.
+
 use std::io::prelude::*;
 
 /// Compute the log-base-two of the next power of two: 8 -> 3, 9 -> 4.

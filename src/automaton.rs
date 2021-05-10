@@ -1,3 +1,28 @@
+//! Provides an interface ([`Automaton`]) for task-based parallelism.
+//! 
+//! This module also provides a handful of sample multi-threaded and
+//! distributed execution strategies which might be useful in production. It
+//! models computations consisting of an ensemble of recurring,
+//! semi-indepdendent tasks, which must exchange messages with a subset of
+//! their peers to complete each stage of the computation. The tasks may exist
+//! in a shared memory setting, with the parallel part of the task execution
+//! being delegated to a pool of worker threads, or they may also be
+//! distributed over a group of processes which exchange messages via the
+//! [`Communicator`] trait. The `Communicator` sends and receives messages as
+//! pure bytes (`Vec<u8>`). For this reason, distributed executors must take
+//! an instance of [`Coder`] which can encode to decode from `(Automaton::Key,
+//! Automaton::Message)`.
+//! 
+//! The task group must be flat, not hierarchical. That means tasks cannot
+//! spawn new asynchronous tasks into the executor while doing their work.
+//! That type of flexibility is offered by other task parallel frameworks like
+//! `taskflow` and also by Rayon's scheduler. The computation modeled here is
+//! appropriate for grid-based physics problems, where a group of tasks is
+//! advanced in discrete stages. This should not preclude time subcycling: if
+//! certain tasks are updated at a higher cadence than others, the work on the
+//! time-coarse tasks can be skipped, even though the executor formally
+//! processes the entire task group at each fine stage.
+
 use core::hash::Hash;
 use std::collections::hash_map::{Entry, HashMap};
 use crate::message::comm::Communicator;
@@ -31,14 +56,13 @@ impl Status {
 /// and yields a computationally intensive data product. The data product can
 /// be another `Automaton` to enable folding of parallel executions. The model
 /// uses message passing rather than memory sharing: tasks own their data, and
-/// transfer ownership of the message content (and memory buffer) to the
-/// recipient. This strategy adheres to the principle of sharing memory by
-/// passing messages, rather than passing messages by sharing memory. Memory
-/// buffers are _owned_ and _transferred_, never _shared_; buffers don't need
-/// to be put under `Arc`, and may be re-used at the discretion of the task on
-/// subsequent executions. Heap usage in the `value` method (which is
-/// generally run on a worker thread by the executor) can thus be avoided
-/// entirely.
+/// transfer ownership of the message content to the recipient. This strategy
+/// adheres to the principle of sharing memory by passing messages, rather
+/// than passing messages by sharing memory. A task's `value` method consumes
+/// `self`, allowing any internal memory buffers it uses for computation to be
+/// transferred to the `Automaton::Value` instance (which may be `Self`). Heap
+/// Heap usage in the `value` method (which is generally run on a worker
+/// thread by the executor) can thus be avoided entirely.
 pub trait Automaton {
     /// The type of the key to uniquely identify this automaton within a
     /// group. Executors will generally require this type to be `Hash + Eq`,

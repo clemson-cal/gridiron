@@ -1,9 +1,12 @@
-//! Provides a message-passing communicator that does nothing. Useful for
-//! testing and for execution strategies that require a communicator of some
-//! type.
+//! Provides a message-passing communicator that does nothing.
+//! 
+//! Useful for testing and for execution strategies that require a
+//! communicator of some type.
 
 use super::comm::Communicator;
 
+/// A message-passing communicator that does nothing. The `rank` and `size`
+/// members are functioning but `send` and `recv` are `unimplemented`.
 pub struct NullCommunicator {}
 
 impl NullCommunicator {
