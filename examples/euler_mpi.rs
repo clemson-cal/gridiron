@@ -128,7 +128,6 @@ struct Opts {
 fn main() {
     let universe = mpi::initialize().unwrap();
     let opts = Opts::parse();
-    println!("{:?}", opts);
 
     if opts.grid_resolution % opts.block_size != 0 {
         eprintln!("Error: block size must divide the grid resolution");
@@ -162,6 +161,9 @@ fn main() {
         .map(|patch| PatchUpdate::new(patch, mesh.clone(), dt, None, &edge_list))
         .collect();
 
+    if comm.rank() == 0 {
+        println!("{:?}", opts);
+    }
     println!("rank {} working on {} blocks", comm.rank(), task_list.len());
 
     while time < opts.tfinal {
@@ -171,6 +173,7 @@ fn main() {
             task_list = automaton::execute_dist(&comm, &code, &work, task_list).collect();
             iteration += 1;
             time += dt;
+            comm.barrier();
         }
         let step_seconds = start.elapsed().as_secs_f64() / opts.fold as f64;
         let mzps = mesh.total_zones() as f64 / 1e6 / step_seconds;

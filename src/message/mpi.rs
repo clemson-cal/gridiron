@@ -1,6 +1,7 @@
 use super::comm;
 use mpi::point_to_point::{Destination, Source};
-use mpi::topology::Communicator;
+use mpi::topology::{Communicator, SystemCommunicator};
+use mpi::collective::CommunicatorCollectives;
 use std::sync::mpsc;
 use std::thread;
 
@@ -8,13 +9,13 @@ type Sender = mpsc::Sender<(usize, Vec<u8>)>;
 type Receiver = mpsc::Receiver<(usize, Vec<u8>)>;
 
 pub struct MpiCommunicator {
-    comm: mpi::topology::SystemCommunicator,
+    comm: SystemCommunicator,
     send_sink: Option<mpsc::Sender<(usize, Vec<u8>)>>,
     send_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl MpiCommunicator {
-    pub fn new(comm: mpi::topology::SystemCommunicator) -> Self {
+    pub fn new(comm: SystemCommunicator) -> Self {
         let (send_sink, recv_sink): (Sender, Receiver) = mpsc::channel();
         let send_thread = thread::spawn(move || {
             for (rank, message) in recv_sink {
@@ -26,6 +27,10 @@ impl MpiCommunicator {
             send_sink: Some(send_sink),
             send_thread: Some(send_thread),
         }
+    }
+
+    pub fn barrier(&self) {
+        self.comm.barrier()
     }
 }
 
