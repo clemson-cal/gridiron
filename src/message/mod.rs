@@ -7,6 +7,7 @@
 //! default implementations for broadcast, reduce, and reduce-all operations.
 
 pub mod comm;
+pub mod mpi;
 pub mod null;
 pub mod tcp;
 pub mod util;

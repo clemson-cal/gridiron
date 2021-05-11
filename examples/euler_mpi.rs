@@ -4,14 +4,11 @@ use gridiron::coder::Coder;
 use gridiron::hydro::euler2d::Primitive;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, tcp::TcpCommunicator};
+use gridiron::message::{comm::Communicator};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::ops::Range;
-use std::thread;
 
 /// The initial model
 struct Model {}
@@ -128,7 +125,17 @@ struct Opts {
     tfinal: f64,
 }
 
-fn run<C: Communicator>(opts: Opts, comm: C) {
+fn main() {
+    let universe = mpi::initialize().unwrap();
+    let opts = Opts::parse();
+    println!("{:?}", opts);
+
+    if opts.grid_resolution % opts.block_size != 0 {
+        eprintln!("Error: block size must divide the grid resolution");
+        return;
+    }
+
+    let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
     let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
@@ -192,36 +199,4 @@ fn run<C: Communicator>(opts: Opts, comm: C) {
     let file = std::fs::File::create(format! {"state.{:04}.cbor", comm.rank()}).unwrap();
     let mut buffer = std::io::BufWriter::new(file);
     ciborium::ser::into_writer(&state, &mut buffer).unwrap();
-}
-
-fn peer(rank: usize) -> SocketAddr {
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000 + rank as u16)
-}
-
-fn main() {
-    let opts = Opts::parse();
-    println!("{:?}", opts);
-
-    if opts.grid_resolution % opts.block_size != 0 {
-        eprintln!("Error: block size must divide the grid resolution");
-        return;
-    }
-
-    let ranks: Range<usize> = 0..2;
-    let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
-    let comms: Vec<_> = ranks
-        .clone()
-        .map(|rank| TcpCommunicator::new(rank, peers.clone()))
-        .collect();
-    let procs: Vec<_> = comms
-        .into_iter()
-        .map(|comm| {
-            let opts = opts.clone();
-            thread::spawn(|| run(opts, comm))
-        })
-        .collect();
-
-    for process in procs {
-        process.join().unwrap()
-    }
 }
