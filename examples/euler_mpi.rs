@@ -126,7 +126,7 @@ struct Opts {
 }
 
 fn main() {
-    let universe = mpi::initialize().unwrap();
+    let (universe, _) = mpi::initialize_with_threading(mpi::environment::Threading::Multiple).unwrap();
     let opts = Opts::parse();
 
     if opts.grid_resolution % opts.block_size != 0 {
