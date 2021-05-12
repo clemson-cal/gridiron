@@ -128,7 +128,7 @@ struct Opts {
     tfinal: f64,
 }
 
-fn run<C: Communicator>(opts: Opts, comm: C) {
+fn run(opts: Opts, mut comm: TcpCommunicator) {
     let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
@@ -164,7 +164,7 @@ fn run<C: Communicator>(opts: Opts, comm: C) {
             task_list = automaton::execute_dist(&comm, &code, &work, task_list).collect();
             iteration += 1;
             time += dt;
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            comm.next_time_stamp();
         }
         let step_seconds = start.elapsed().as_secs_f64() / opts.fold as f64;
         let mzps = mesh.total_zones() as f64 / 1e6 / step_seconds;

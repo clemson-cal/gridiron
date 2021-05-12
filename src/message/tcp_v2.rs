@@ -144,6 +144,8 @@ pub struct TcpCommunicator {
     rank: usize,
     peers: Vec<SocketAddr>,
     connections: RefCell<ConnectionPool>,
+    undelivered: RefCell<Vec<(Vec<u8>, usize)>>,
+    time_stamp: usize,
 }
 
 impl TcpCommunicator {
@@ -154,7 +156,13 @@ impl TcpCommunicator {
             rank,
             peers,
             connections,
+            undelivered: RefCell::new(Vec::new()),
+            time_stamp: 0,
         }
+    }
+
+    pub fn next_time_stamp(&mut self) {
+        self.time_stamp += 1;
     }
 }
 
@@ -168,10 +176,22 @@ impl Communicator for TcpCommunicator {
     }
 
     fn send(&self, rank: usize, message: Vec<u8>) {
-        self.connections.borrow_mut().send(self.peers[rank], message, 0)
+        self.connections.borrow_mut().send(self.peers[rank], message, self.time_stamp)
     }
 
     fn recv(&self) -> Vec<u8> {
-        self.connections.borrow_mut().recv().0
+        let mut connections = self.connections.borrow_mut();
+        let mut undelivered = self.undelivered.borrow_mut();
+        match undelivered.iter().position(|(_, tag)| tag == &self.time_stamp) {
+            Some(index) => undelivered.remove(index).0,
+            None => loop {
+                let (message, tag) = connections.recv();
+                if tag != self.time_stamp {
+                    undelivered.push((message, tag))
+                } else {
+                    return message                        
+                }
+            }
+        }
     }
 }
