@@ -161,10 +161,9 @@ fn run(opts: Opts, mut comm: TcpCommunicator) {
         let start = std::time::Instant::now();
 
         for _ in 0..opts.fold {
-            task_list = automaton::execute_dist(&comm, &code, &work, task_list).collect();
+            task_list = automaton::execute_dist(&mut comm, &code, &work, task_list).collect();
             iteration += 1;
             time += dt;
-            comm.next_time_stamp();
         }
         let step_seconds = start.elapsed().as_secs_f64() / opts.fold as f64;
         let mzps = mesh.total_zones() as f64 / 1e6 / step_seconds;

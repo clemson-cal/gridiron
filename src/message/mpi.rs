@@ -34,19 +34,17 @@ impl MpiCommunicator {
     pub fn barrier(&self) {
         self.comm.barrier()
     }
-
-    pub fn next_time_stamp(&mut self) {
-        self.time_stamp += 1;
-    }
 }
 
 impl comm::Communicator for MpiCommunicator {
     fn rank(&self) -> usize {
         self.comm.rank() as usize
     }
+
     fn size(&self) -> usize {
         self.comm.size() as usize
     }
+
     fn send(&self, rank: usize, message: Vec<u8>) {
         self.send_sink
             .as_ref()
@@ -54,8 +52,13 @@ impl comm::Communicator for MpiCommunicator {
             .send((rank, self.time_stamp, message))
             .unwrap()
     }
+
     fn recv(&self) -> Vec<u8> {
         self.comm.any_process().receive_vec_with_tag(self.time_stamp).0
+    }
+
+    fn next_time_stamp(&mut self) {
+        self.time_stamp += 1;
     }
 }
 

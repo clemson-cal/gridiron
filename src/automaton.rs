@@ -116,11 +116,11 @@ where
     K: Hash + Eq,
 {
     let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
-    let comm = NullCommunicator {};
+    let mut comm = NullCommunicator {};
     let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
     let sink = |a: A| eligible_sink.send(a).unwrap();
-    coordinate(flow, &comm, &code, work, sink);
+    coordinate(flow, &mut comm, &code, work, sink);
     eligible_source.into_iter().map(|peer: A| peer.value())
 }
 
@@ -145,7 +145,7 @@ where
         "automaton::execute_par requires the Rayon pool to be running at least two threads"
     };
     let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
-    let comm = NullCommunicator {};
+    let mut comm = NullCommunicator {};
     let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
     let sink = |a: A| {
@@ -154,7 +154,7 @@ where
             eligible_sink.send(a.value()).unwrap();
         })
     };
-    coordinate(flow, &comm, &code, work, sink);
+    coordinate(flow, &mut comm, &code, work, sink);
     eligible_source.into_iter()
 }
 
@@ -174,7 +174,7 @@ where
         "automaton::execute_par_stupid requires the thread pool to be running at least two threads"
     };
     let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
-    let comm = NullCommunicator {};
+    let mut comm = NullCommunicator {};
     let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
     let sink = |a: A| {
@@ -183,7 +183,7 @@ where
             eligible_sink.send(a.value()).unwrap();
         });
     };
-    coordinate(flow, &comm, &code, work, sink);
+    coordinate(flow, &mut comm, &code, work, sink);
     eligible_source.into_iter()
 }
 
@@ -191,7 +191,7 @@ where
 /// distributed communicator.
 #[allow(unused)]
 pub fn execute_dist<Comm, Code, I, A, K, V>(
-    comm: &Comm,
+    comm: &mut Comm,
     code: &Code,
     work: &HashMap<K, usize>,
     flow: I,
@@ -212,7 +212,7 @@ where
 
 fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
     flow: I,
-    comm: &Comm,
+    comm: &mut Comm,
     code: &Code,
     work: Work,
     sink: Sink,
@@ -287,4 +287,5 @@ fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
             }
         }
     }
+    comm.next_time_stamp();
 }

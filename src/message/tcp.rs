@@ -66,6 +66,10 @@ impl Communicator for TcpCommunicator {
         let size = util::read_usize(&mut stream);
         util::read_bytes_vec(&mut stream, size)
     }
+
+    fn next_time_stamp(&mut self) {
+        unimplemented!("this Communicator impl is deprecated")
+    }
 }
 
 impl Drop for TcpCommunicator {

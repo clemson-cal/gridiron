@@ -31,6 +31,9 @@ impl Communicator for NullCommunicator {
     fn recv(&self) -> Vec<u8> {
         unimplemented!("cannot recv on a null communicator")
     }
+
+    fn next_time_stamp(&mut self) {        
+    }
 }
 
 impl Default for NullCommunicator {

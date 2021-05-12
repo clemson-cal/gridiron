@@ -157,10 +157,6 @@ impl TcpCommunicator {
             time_stamp: 0,
         }
     }
-
-    pub fn next_time_stamp(&mut self) {
-        self.time_stamp += 1;
-    }
 }
 
 impl Communicator for TcpCommunicator {
@@ -195,5 +191,9 @@ impl Communicator for TcpCommunicator {
                 }
             },
         }
+    }
+
+    fn next_time_stamp(&mut self) {
+        self.time_stamp += 1;
     }
 }

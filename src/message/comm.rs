@@ -3,8 +3,18 @@
 use super::util;
 
 /// Interface for a group of processes that can exchange messages over a
-/// network. The underlying transport can in principle be TCP, UDP, or another
-/// abstraction layer like MPI.
+/// network.
+///
+/// The underlying transport can in principle be TCP, UDP, or another
+/// abstraction layer like MPI. The communicator is stateful, in the sense
+/// that it maintains a time stamp to keep messages from distinct generations
+/// (computational stages) separated from each other. Sent messages must
+/// encode the current time stamp somehow, and the received messages also need
+/// to match it. This implies that if a message for a future time stamp is
+/// read from the socket, it needs to be stored for a future receive call once
+/// the communicator has been advanced to that time stamp. If the communicator
+/// is used by a distributed executor, it is the responsibility of the
+/// executor to advance the time stamp after each stage of computation.
 pub trait Communicator {
     /// Must be implemented to return the rank of this process within the
     /// communicator.
@@ -22,6 +32,9 @@ pub trait Communicator {
     /// Must be implemented to receive a message from any of the peers. This
     /// method is allowed to block until a message is ready to be received
     fn recv(&self) -> Vec<u8>;
+
+    /// Must be implemented to advance the communicator's internal time stamp.
+    fn next_time_stamp(&mut self);
 
     /// Implements a binomial tree broadcast from the root node. The message
     /// buffer must be `Some` if this is the root node, and it must be `None`
