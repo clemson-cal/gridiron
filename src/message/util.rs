@@ -34,10 +34,7 @@ pub fn read_bytes_vec<R: Read>(stream: &mut R, size: usize) -> Vec<u8> {
 /// `None`.
 pub fn read_bytes_vec_non_blocking<R: Read>(stream: &mut R, size: usize) -> Option<Vec<u8>> {
     let mut buffer = vec![0; size];
-    match read_bytes_into_non_blocking(stream, &mut buffer) {
-        Some(_) => Some(buffer),
-        None => None
-    }
+    read_bytes_into_non_blocking(stream, &mut buffer).map(|_| buffer)
 }
 
 /// Read the given (const) number of bytes from a stream, into an array.
@@ -52,10 +49,7 @@ pub fn read_bytes_array<R: Read, const SIZE: usize>(stream: &mut R) -> [u8; SIZE
 /// return `None`.
 pub fn read_bytes_array_non_blocking<R: Read, const SIZE: usize>(stream: &mut R) -> Option<[u8; SIZE]> {
     let mut buffer = [0; SIZE];
-    match read_bytes_into_non_blocking(stream, &mut buffer) {
-        Some(_) => Some(buffer),
-        None => None
-    }
+    read_bytes_into_non_blocking(stream, &mut buffer).map(|_| buffer)
 }
 
 /// Fill up the given buffer by reading bytes from a stream repeatedly until
@@ -71,7 +65,7 @@ pub fn read_bytes_into<R: Read>(stream: &mut R, buffer: &mut [u8]) {
 /// reading bytes from a stream repeatedly until the buffer is full.
 /// Otherwise, return immediately.
 pub fn read_bytes_into_non_blocking<R: Read>(stream: &mut R, buffer: &mut [u8]) -> Option<()> {
-    let cursor = stream.read(&mut buffer[..]).unwrap_or(0);
+    let cursor = stream.read(&mut *buffer).unwrap_or(0);
     if cursor == 0 {
         None
     } else {

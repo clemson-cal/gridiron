@@ -24,7 +24,7 @@ impl MpiCommunicator {
             }
         });
         Self {
-            comm: comm,
+            comm,
             send_sink: Some(send_sink),
             send_thread: Some(send_thread),
             time_stamp: 0,

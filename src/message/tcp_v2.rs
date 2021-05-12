@@ -1,11 +1,11 @@
 //! Provides a message-passing communicator based on TCP sockets.
-//! 
+//!
 //! TCP is a connection-oriented protocol, which means that a connection must
 //! be established between the sending and receiving ends of the socket in
 //! order to read from or write to a stream.
 
-use super::util;
 use super::comm::Communicator;
+use super::util;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -114,11 +114,8 @@ impl ConnectionPool {
                     return message;
                 }
             }
-            match self.listener.accept() {
-                Ok((stream, _)) => {
-                    self.streams.push(NonBlockingStream::from_stream(stream))
-                }
-                Err(_) => {}
+            if let Ok((stream, _)) = self.listener.accept() {
+                self.streams.push(NonBlockingStream::from_stream(stream))
             }
         }
     }
@@ -176,22 +173,27 @@ impl Communicator for TcpCommunicator {
     }
 
     fn send(&self, rank: usize, message: Vec<u8>) {
-        self.connections.borrow_mut().send(self.peers[rank], message, self.time_stamp)
+        self.connections
+            .borrow_mut()
+            .send(self.peers[rank], message, self.time_stamp)
     }
 
     fn recv(&self) -> Vec<u8> {
         let mut connections = self.connections.borrow_mut();
         let mut undelivered = self.undelivered.borrow_mut();
-        match undelivered.iter().position(|(_, tag)| tag == &self.time_stamp) {
+        match undelivered
+            .iter()
+            .position(|(_, tag)| tag == &self.time_stamp)
+        {
             Some(index) => undelivered.remove(index).0,
             None => loop {
                 let (message, tag) = connections.recv();
                 if tag != self.time_stamp {
                     undelivered.push((message, tag))
                 } else {
-                    return message                        
+                    return message;
                 }
-            }
+            },
         }
     }
 }
