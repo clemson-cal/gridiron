@@ -46,3 +46,11 @@ It does _not_ attempt to
   particles, radiative transfer, self-gravity, and reaction networks.
   However, this library does not try to implement these things. The focus
   is on abstractions for meshing and execution.
+
+# MPI dependencies
+If building with MPI support, your system needs to have either OpenMPI or mpich installed, in addition to  `automake`. On Mac, these can be installed with Homebrew:
+
+```bash
+brew install mpich
+brew install automake
+```

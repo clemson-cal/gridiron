@@ -4,7 +4,7 @@ use gridiron::coder::Coder;
 use gridiron::hydro::euler2d::Primitive;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator};
+use gridiron::message::comm::Communicator as GridIronCommunicator;
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
@@ -89,7 +89,7 @@ where
 fn work_assignment(
     bs: usize,
     mesh: &Mesh,
-    comm: &impl Communicator,
+    comm: &impl GridIronCommunicator,
 ) -> HashMap<Rectangle<i64>, usize> {
     let bs = bs as i64;
     let ni = mesh.size.0 as i64 / bs;
@@ -126,7 +126,8 @@ struct Opts {
 }
 
 fn main() {
-    let (universe, _) = mpi::initialize_with_threading(mpi::environment::Threading::Multiple).unwrap();
+    let threading = mpi::environment::Threading::Multiple;
+    let (universe, _) = mpi::initialize_with_threading(threading).unwrap();
     let opts = Opts::parse();
 
     if opts.grid_resolution % opts.block_size != 0 {

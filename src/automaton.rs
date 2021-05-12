@@ -1,5 +1,5 @@
 //! Provides an interface ([`Automaton`]) for task-based parallelism.
-//! 
+//!
 //! This module also provides a handful of sample multi-threaded and
 //! distributed execution strategies which might be useful in production. It
 //! models computations consisting of an ensemble of recurring,
@@ -12,7 +12,7 @@
 //! pure bytes (`Vec<u8>`). For this reason, distributed executors must take
 //! an instance of [`Coder`] which can encode to decode from `(Automaton::Key,
 //! Automaton::Message)`.
-//! 
+//!
 //! The task group must be flat, not hierarchical. That means tasks cannot
 //! spawn new asynchronous tasks into the executor while doing their work.
 //! That type of flexibility is offered by other task parallel frameworks like
@@ -23,11 +23,11 @@
 //! time-coarse tasks can be skipped, even though the executor formally
 //! processes the entire task group at each fine stage.
 
-use core::hash::Hash;
-use std::collections::hash_map::{Entry, HashMap};
+use crate::coder::{Coder, NullCoder};
 use crate::message::comm::Communicator;
 use crate::message::null::NullCommunicator;
-use crate::coder::{Coder, NullCoder};
+use core::hash::Hash;
+use std::collections::hash_map::{Entry, HashMap};
 
 /// Returned by [`Automaton::receive`] to indicate whether a task is eligible
 /// to be evaluated.
@@ -130,7 +130,10 @@ where
 /// receiving a message are spawned into the Rayon thread pool. This function
 /// returns as soon as the input iterator is exhausted. The output iterator
 /// will then yield results until all the tasks have completed in the pool.
-pub fn execute_par<'a, I, A, K, V, M>(scope: &rayon::ScopeFifo<'a>, flow: I) -> impl Iterator<Item = V>
+pub fn execute_par<'a, I, A, K, V, M>(
+    scope: &rayon::ScopeFifo<'a>,
+    flow: I,
+) -> impl Iterator<Item = V>
 where
     I: IntoIterator<Item = A>,
     A: Send + Automaton<Key = K, Value = V, Message = M> + 'a,
@@ -212,8 +215,8 @@ fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
     comm: &Comm,
     code: &Code,
     work: Work,
-    sink: Sink)
-where
+    sink: Sink,
+) where
     Comm: Communicator,
     Code: Coder<Type = (A::Key, A::Message)>,
     Work: Fn(&K) -> usize,
@@ -233,7 +236,7 @@ where
         // If any of the recipient peers became eligible upon receiving a
         // message, then send those peers off to be executed.
         for (dest, data) in a.messages() {
-            if work(&dest) == comm.rank() {            
+            if work(&dest) == comm.rank() {
                 match seen.entry(dest) {
                     Entry::Occupied(mut entry) => {
                         if let Status::Eligible = entry.get_mut().receive(data) {
@@ -278,7 +281,9 @@ where
                 }
             }
             Entry::Vacant(_) => {
-                panic!("message received for a task that has not been seen or already evaluated")
+                panic!(
+                    "message received for a task that has not been seen or was already evaluated"
+                )
             }
         }
     }
