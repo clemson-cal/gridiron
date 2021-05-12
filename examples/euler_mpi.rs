@@ -135,7 +135,7 @@ fn main() {
         return;
     }
 
-    let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
+    let mut comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
     let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
@@ -174,7 +174,7 @@ fn main() {
             task_list = automaton::execute_dist(&comm, &code, &work, task_list).collect();
             iteration += 1;
             time += dt;
-            comm.barrier();
+            comm.next_time_stamp();
         }
         let step_seconds = start.elapsed().as_secs_f64() / opts.fold as f64;
         let mzps = mesh.total_zones() as f64 / 1e6 / step_seconds;
