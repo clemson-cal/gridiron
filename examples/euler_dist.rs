@@ -4,7 +4,7 @@ use gridiron::coder::Coder;
 use gridiron::hydro::euler2d::Primitive;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, tcp::TcpCommunicator};
+use gridiron::message::{comm::Communicator, tcp_v2::TcpCommunicator};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
@@ -164,6 +164,7 @@ fn run<C: Communicator>(opts: Opts, comm: C) {
             task_list = automaton::execute_dist(&comm, &code, &work, task_list).collect();
             iteration += 1;
             time += dt;
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
         let step_seconds = start.elapsed().as_secs_f64() / opts.fold as f64;
         let mzps = mesh.total_zones() as f64 / 1e6 / step_seconds;
@@ -207,7 +208,7 @@ fn main() {
         return;
     }
 
-    let ranks: Range<usize> = 0..2;
+    let ranks: Range<usize> = 0..10;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
     let comms: Vec<_> = ranks
         .clone()
