@@ -5,7 +5,7 @@ use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, tcp_v2::TcpCommunicator};
+use gridiron::message::{comm::Communicator, tcp::TcpCommunicator};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use std::collections::HashMap;

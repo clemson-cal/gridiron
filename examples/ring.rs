@@ -1,5 +1,5 @@
 use gridiron::message::comm::Communicator;
-use gridiron::message::tcp_v2::TcpCommunicator;
+use gridiron::message::tcp::TcpCommunicator;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Range;
 use std::thread;
