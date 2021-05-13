@@ -1,16 +1,15 @@
-use crate::adjacency_list::AdjacencyList;
-use crate::automaton::{Automaton, Status};
+use gridiron::adjacency_list::AdjacencyList;
+use gridiron::automaton::{Automaton, Status};
+use gridiron::index_space::{Axis, IndexSpace};
+use gridiron::meshing;
+use gridiron::patch::Patch;
+use gridiron::rect_map::Rectangle;
 use crate::hydro::{euler2d, euler2d::Conserved, euler2d::Primitive, geometry::Direction};
-use crate::index_space::{Axis, IndexSpace};
-use crate::meshing;
-use crate::patch::Patch;
-use crate::rect_map::Rectangle;
 
 const NUM_GUARD: i64 = 1;
 const GAMMA_LAW_INDEX: f64 = 5.0 / 3.0;
 
 /// A simple rectilinear structured mesh
-///
 #[derive(Clone)]
 pub struct Mesh {
     pub area: Rectangle<f64>,
@@ -37,7 +36,6 @@ impl Mesh {
 }
 
 /// A basic first-order update scheme, hard-coded for the 2D euler equations.
-///
 pub struct PatchUpdate {
     conserved: Patch,
     extended_primitive: Patch,

@@ -1,3 +1,4 @@
+#![cfg(feature = "mpi")]
 use super::comm;
 use mpi::point_to_point::{Destination, Source};
 use mpi::topology::{Communicator, SystemCommunicator};

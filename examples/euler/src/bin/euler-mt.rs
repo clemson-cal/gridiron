@@ -1,11 +1,11 @@
 use clap::{AppSettings, Clap};
 use gridiron::automaton;
-use gridiron::hydro::euler2d::Primitive;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
 use gridiron::patch::Patch;
 use gridiron::rect_map::RectangleMap;
-use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
+use euler::hydro::euler2d::Primitive;
+use euler::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 
 /// The initial model
 struct Model {}

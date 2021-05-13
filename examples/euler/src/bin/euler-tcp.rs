@@ -1,13 +1,13 @@
 use clap::{AppSettings, Clap};
+use euler::hydro::euler2d::Primitive;
+use euler::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
-use gridiron::hydro::euler2d::Primitive;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
 use gridiron::message::{comm::Communicator, tcp_v2::TcpCommunicator};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
-use gridiron::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Range;
