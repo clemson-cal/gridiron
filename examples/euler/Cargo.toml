@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 clap     = { version = "3.0.0-beta" }
 rayon    = { version = "1.5" }
+mpi      = { version = "0.5" }
 serde    = { version = "1.0", features = ["derive"] }
 ciborium = { version = "0.1" }
 gridiron = { path = "../..", features = ["mpi", "core_affinity", "rayon", "serde", "crossbeam-channel"] }

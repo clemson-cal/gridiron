@@ -1,17 +1,44 @@
+pub mod hydro;
+pub mod solvers;
+
 use clap::{AppSettings, Clap};
-use euler::hydro::euler2d::Primitive;
-use euler::solvers::euler2d_pcm::{Mesh, PatchUpdate};
+use crate::hydro::euler2d::Primitive;
+use crate::solvers::euler2d_pcm::{Mesh, PatchUpdate};
 use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, tcp::TcpCommunicator};
+use gridiron::message::{comm::Communicator, null::NullCommunicator, tcp::TcpCommunicator};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
+use gridiron::thread_pool;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Range;
 use std::thread;
+
+#[derive(Debug, Clone, Clap)]
+#[clap(version = "1.0", author = "J. Zrake <jzrake@clemson.edu>")]
+#[clap(setting = AppSettings::ColoredHelp)]
+struct Opts {
+    #[clap(short = 't', long, default_value = "1")]
+    num_threads: usize,
+
+    #[clap(short = 's', long, default_value = "serial", about = "serial|stupid|rayon|tcp|mpi")]
+    strategy: String,
+
+    #[clap(short = 'n', long, default_value = "1000")]
+    grid_resolution: usize,
+
+    #[clap(short = 'b', long, default_value = "100")]
+    block_size: usize,
+
+    #[clap(short = 'f', long, default_value = "1")]
+    fold: usize,
+
+    #[clap(long, default_value = "0.1")]
+    tfinal: f64,
+}
 
 /// The initial model
 struct Model {}
@@ -111,24 +138,14 @@ fn work_assignment(
         .collect()
 }
 
-#[derive(Debug, Clone, Clap)]
-#[clap(version = "1.0", author = "J. Zrake <jzrake@clemson.edu>")]
-#[clap(setting = AppSettings::ColoredHelp)]
-struct Opts {
-    #[clap(short = 'n', long, default_value = "1000")]
-    grid_resolution: usize,
-
-    #[clap(short = 'b', long, default_value = "100")]
-    block_size: usize,
-
-    #[clap(short = 'f', long, default_value = "1")]
-    fold: usize,
-
-    #[clap(long, default_value = "0.1")]
-    tfinal: f64,
+enum Execution {
+    Serial,
+    Stupid(gridiron::thread_pool::ThreadPool),
+    Rayon(rayon::ThreadPool),
+    Distributed,
 }
 
-fn run(opts: Opts, mut comm: TcpCommunicator) {
+fn run(opts: Opts, mut comm: impl Communicator) {
     let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
@@ -155,13 +172,58 @@ fn run(opts: Opts, mut comm: TcpCommunicator) {
         .map(|patch| PatchUpdate::new(patch, mesh.clone(), dt, None, &edge_list))
         .collect();
 
+    if opts.grid_resolution % opts.block_size != 0 {
+        if comm.rank() == 0 {
+            eprintln!("Error: block size must divide the grid resolution");
+        }
+        return;
+    }
+
+    if vec!["serial", "mpi", "tcp"].contains(&opts.strategy.as_str()) && opts.num_threads != 1 {
+        if comm.rank() == 0 {
+            eprintln!("Error: strategy option requires --num-threads=1");
+        }
+        return;
+    }
+
+    let executor = match opts.strategy.as_str() {
+        "serial" => Execution::Serial,
+        "stupid" => Execution::Stupid(thread_pool::ThreadPool::new(opts.num_threads)),
+        "rayon" => Execution::Rayon(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(opts.num_threads)
+                .build()
+                .unwrap(),
+        ),
+        "tcp"|"mpi" => Execution::Distributed,
+        _ => {
+            eprintln!("Error: --strategy options are [serial|stupid|rayon|tcp|mpi]");
+            return;
+        }
+    };
+
     println!("rank {} working on {} blocks", comm.rank(), task_list.len());
 
     while time < opts.tfinal {
         let start = std::time::Instant::now();
 
         for _ in 0..opts.fold {
-            task_list = automaton::execute_dist(&mut comm, &code, &work, task_list).collect();
+            task_list = match executor {
+                Execution::Serial => {
+                    automaton::execute(task_list).collect()
+                }
+                Execution::Stupid(ref pool) => {
+                    automaton::execute_thread_pool(&pool, task_list).collect()
+                }
+                Execution::Rayon(ref pool) => {
+                    pool.scope(|scope| {
+                        automaton::execute_rayon(scope, task_list)
+                    }).collect()
+                }
+                Execution::Distributed => {
+                    automaton::execute_comm(&mut comm, &code, &work, None, task_list).collect()
+                }
+            };
             iteration += 1;
             time += dt;
         }
@@ -198,15 +260,7 @@ fn peer(rank: usize) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000 + rank as u16)
 }
 
-fn main() {
-    let opts = Opts::parse();
-    println!("{:?}", opts);
-
-    if opts.grid_resolution % opts.block_size != 0 {
-        eprintln!("Error: block size must divide the grid resolution");
-        return;
-    }
-
+fn main_tcp(opts: Opts) {
     let ranks: Range<usize> = 0..10;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
     let comms: Vec<_> = ranks
@@ -223,5 +277,33 @@ fn main() {
 
     for process in procs {
         process.join().unwrap()
+    }
+}
+
+fn main_mpi(opts: Opts) {
+    let threading = mpi::environment::Threading::Multiple;
+    let (universe, _) = mpi::initialize_with_threading(threading).unwrap();
+    let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
+    run(opts, comm)
+}
+
+fn main_mt(opts: Opts) {
+    run(opts, NullCommunicator::new())
+}
+
+fn main() {
+    let opts = Opts::parse();
+    println!("{:?}", opts);
+
+    match opts.strategy.as_str() {
+        "mpi" => {
+            main_mpi(opts)
+        }
+        "tcp" => {
+            main_tcp(opts)
+        }
+        _ => {
+            main_mt(opts)
+        }
     }
 }

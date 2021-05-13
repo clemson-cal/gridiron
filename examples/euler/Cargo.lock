@@ -261,6 +261,7 @@ dependencies = [
  "ciborium",
  "clap 3.0.0-beta.2",
  "gridiron",
+ "mpi",
  "rayon",
  "serde",
 ]

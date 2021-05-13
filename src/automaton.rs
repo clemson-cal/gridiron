@@ -203,7 +203,7 @@ pub fn execute_comm<Comm, Code, I, A, K, V, M>(
     comm: &mut Comm,
     code: &Code,
     work: &HashMap<K, usize>,
-    pool: &Option<crate::thread_pool::ThreadPool>,
+    pool: Option<&crate::thread_pool::ThreadPool>,
     flow: I,
 ) -> impl Iterator<Item = V>
 where
