@@ -186,7 +186,6 @@ where
 
 /// Execute a group of compute tasks using a single-threaded strategy and a
 /// distributed communicator.
-#[allow(unused)]
 pub fn execute_dist<Comm, Code, I, A, K, V>(
     comm: &mut Comm,
     code: &Code,

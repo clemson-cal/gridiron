@@ -10,3 +10,8 @@ core_affinity     = { version = "0.5", optional = true }
 mpi               = { version = "0.5", optional = true }
 rayon             = { version = "1.5", optional = true }
 serde             = { version = "1.0", optional = true, features = ["derive"] }
+
+[dev-dependencies]
+core_affinity = "0.5"
+crossbeam-channel = "0.5"
+rayon = "1.5"
