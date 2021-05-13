@@ -179,7 +179,7 @@ fn run(opts: Opts, mut comm: impl Communicator) {
         return;
     }
 
-    if vec!["serial", "mpi", "tcp"].contains(&opts.strategy.as_str()) && opts.num_threads != 1 {
+    if vec!["serial", "mpi"].contains(&opts.strategy.as_str()) && opts.num_threads != 1 {
         if comm.rank() == 0 {
             eprintln!("Error: strategy option requires --num-threads=1");
         }
@@ -257,11 +257,11 @@ fn run(opts: Opts, mut comm: impl Communicator) {
 }
 
 fn peer(rank: usize) -> SocketAddr {
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000 + rank as u16)
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7070 + rank as u16)
 }
 
 fn main_tcp(opts: Opts) {
-    let ranks: Range<usize> = 0..10;
+    let ranks: Range<usize> = 0..opts.num_threads;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
     let comms: Vec<_> = ranks
         .clone()
