@@ -1,4 +1,4 @@
-use gridiron::automaton::{execute_par_thread_pool, Automaton, Status};
+use gridiron::automaton::{execute_thread_pool, Automaton, Status};
 
 struct ConcatenateNearestNeighbors {
     key: u32,
@@ -57,7 +57,7 @@ fn main() {
 
     assert_eq! {
         group_size as usize,
-        execute_par_thread_pool(&pool, group)
+        execute_thread_pool(&pool, group)
         .inspect(|result| println!("{}", result))
         .count()
     };

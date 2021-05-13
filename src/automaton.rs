@@ -126,17 +126,22 @@ where
     eligible_source.into_iter().map(|peer: A| peer.value())
 }
 
-/// Execute a group of tasks in parallel on the Rayon thread pool.
+/// Executes a group of tasks in parallel on the Rayon thread pool.
 ///
 /// As tasks are yielded from the input iterator (`flow`), their messages are
 /// gathered and delivered to any pending tasks. Those tasks which become
-/// eligible upon receiving a message are spawned into the Rayon thread pool.
-/// This function returns as soon as the input iterator is exhausted. The
-/// output iterator will then yield results until all the tasks have completed
-/// in the pool.
+/// eligible upon receiving a message are spawned onto a worker thread. This
+/// function returns as soon as the input iterator is exhausted. The output
+/// iterator will then yield results until all the tasks have completed in the
+/// pool.
+///
+/// __Warning__: although it's possible to chain task group executions into
+/// chunks, and collect them after several stages, something about Rayon's
+/// thread pool requires at least two worker threads to be running for this to
+/// work. That limitation doesn't apply to the `gridiron` thread pool.
 #[cfg(feature = "rayon")]
-pub fn execute_par_rayon<'a, I, A, K, V, M>(
-    scope: &rayon::ScopeFifo<'a>,
+pub fn execute_rayon<'a, I, A, K, V, M>(
+    scope: &rayon::Scope<'a>,
     flow: I,
 ) -> impl Iterator<Item = V>
 where
@@ -151,7 +156,7 @@ where
     let work = |_: &K| 0;
     let sink = |a: A| {
         let eligible_sink = eligible_sink.clone();
-        scope.spawn_fifo(move |_| {
+        scope.spawn(move |_| {
             eligible_sink.send(a.value()).unwrap();
         })
     };
@@ -159,8 +164,15 @@ where
     eligible_source.into_iter()
 }
 
-/// Execute a group of tasks in parallel using `gridiron`'s thread pool.
-pub fn execute_par_thread_pool<I, A, K, V, M>(
+/// Executes a group of tasks in parallel using `gridiron`'s thread pool.
+///
+/// As tasks are yielded from the input iterator (`flow`), their messages are
+/// gathered and delivered to any pending tasks. Those tasks which become
+/// eligible upon receiving a message are spawned onto a worker thread. This
+/// function returns as soon as the input iterator is exhausted. The output
+/// iterator will then yield results until all the tasks have completed in the
+/// pool.
+pub fn execute_thread_pool<I, A, K, V, M>(
     pool: &crate::thread_pool::ThreadPool,
     flow: I,
 ) -> impl Iterator<Item = V>
@@ -178,30 +190,41 @@ where
         let eligible_sink = eligible_sink.clone();
         pool.spawn_on(a.worker_hint(), move || {
             eligible_sink.send(a.value()).unwrap();
-        });
+        })
     };
     coordinate(flow, &mut comm, &code, work, sink);
     eligible_source.into_iter()
 }
 
-/// Execute a group of compute tasks using a single-threaded strategy and a
-/// distributed communicator.
-pub fn execute_dist<Comm, Code, I, A, K, V>(
+/// Executes a group of compute tasks using a distributed communicator, and an
+/// optional pool of worker threads. If no pool is given, the executions are
+/// done synchronously.
+pub fn execute_comm<Comm, Code, I, A, K, V, M>(
     comm: &mut Comm,
     code: &Code,
     work: &HashMap<K, usize>,
+    pool: &Option<crate::thread_pool::ThreadPool>,
     flow: I,
 ) -> impl Iterator<Item = V>
 where
     Comm: Communicator,
     Code: Coder<Type = (A::Key, A::Message)>,
     I: IntoIterator<Item = A>,
-    A: Automaton<Key = K, Value = V>,
-    K: Hash + Eq,
+    A: 'static + Send + Automaton<Key = K, Value = V, Message = M>,
+    K: 'static + Hash + Eq,
+    V: 'static + Send,
 {
     let (eligible_sink, eligible_source) = make_channels();
     let work = |k: &K| work[k];
-    let sink = |a: A| eligible_sink.send(a.value()).unwrap();
+    let sink = |a: A| match pool {
+        Some(pool) => {
+            let eligible_sink = eligible_sink.clone();
+            pool.spawn_on(a.worker_hint(), move || {
+                eligible_sink.send(a.value()).unwrap();
+            })
+        }
+        None => eligible_sink.send(a.value()).unwrap(),
+    };
     coordinate(flow, comm, code, work, sink);
     eligible_source.into_iter()
 }
