@@ -14,25 +14,29 @@ This library is a work-in-progress in early stages. Its goals are:
 - Provide meshing and execution abstractions for hydrodynamics base
   schemes. If you have a scheme that works on logically Cartesian grid
   patches, this library can make that scheme suitable for AMR simulations.
-- Be aggressively optimized in terms of computations (eliminating
-  redundancy), array traversals (no multi-dimensional indexing), memory
-  access patterns (optimal cache + heap utilization), and parallel
-  execution strategies.
+- Be aggressively optimized in terms of computations, array traversals (no
+  multi-dimensional indexing), and memory access patterns (optimal cache +
+  heap utilization).
 - Provide efficient strategies for hybrid parallelization based on
   shared memory and distributed multi-processing.
-- Not to depend on other work-in-progress crates. Many HPC-oriented Rust
-  crates look promising, but are still in flux; this crate should not
-  depend on things like `ndarray`, `hdf5`, or `rsmpi`. Dependencies are
-  currently limited to `rayon` and `crossbeam_channel`. `serde` is
-  presently required in the library to support the examples, but it should
-  be made optional.
+- Have minimal dependencies. The library can be used without any outside
+  crates. Optional dependences include `rayon` (for its thread pool, although
+  a custom thread pool is also included), `serde` (for message passing and
+  checkpoints). Optional features that only effect performance are
+  `crossbeam_channel` and `core_affinity`. The `examples/euler` sub-crate
+  demonstrates ues of all the optional features.
 - Have fast compile times. The debug cycle for physics simulations often
-  requires frequent recompilation and inspection of results. Compile times
-  of 1-2 seconds are fine, but the code should not take 30 seconds to
-  compile, as can happen with lots of generics, excessive use of `async`,
-  link-time optimizations, etc. For this reason the primary data structure
-  (`patch::Patch`) is not generic over an array element type; it uses
-  `f64` and a runtime-specified number of fields per array element.
+  requires frequent recompilation and inspection of results. Compile times of
+  1-2 seconds are fine, but the code should not take 30 seconds to compile, as
+  can happen with excessive use of generics, `async`, link-time optimizations,
+  etc. For this reason the primary data structure (`patch::Patch`) is not
+  generic over an array element type; it uses `f64` and a runtime-specified
+  number of fields per grid cell location. It's encouraged to keep solver and
+  physics code together in the same crate as the science application, because
+  it allows `rustc` to optimize these modules together without link-time
+  optimizations. There isn't much compute-intensive work done in the
+  `gridiron` library functions, so there's no performance penalties for using
+  it as a separate crate.
 - Provide examples of stand-alone applications which use the library.
 
 It does _not_ attempt to
@@ -41,14 +45,20 @@ It does _not_ attempt to
   configurations, visualization and post-processing should be handled by
   separate crates or by applications written for a specific science
   problem.
-- Provide lots of physics. The library will be written to support
-  multi-physics applications which require things like MHD, tracer
-  particles, radiative transfer, self-gravity, and reaction networks.
-  However, this library does not try to implement these things. The focus
-  is on abstractions for meshing and execution.
+- Provide lots of physics. The library will be written to facilitate
+  multi-physics science applications that may require MHD, tracer particles,
+  radiative transfer, self-gravity, and reaction networks. However, this
+  library does not try to implement these things. The focus is the meshing and
+  parallelization.
 
-# MPI dependencies
-If building with MPI support, your system needs to have either OpenMPI or mpich installed, in addition to  `automake`. On Mac, these can be installed with Homebrew:
+# Building with MPI (optional)
+MPI is not required for distributed parallel calculations, because there is a
+built-in message-passing module based on TCP sockets.
+
+If you want to use MPI on an HPC cluster, just make sure you've loaded one of
+their MPI modules with e.g. `module load mpi`. On your laptop or workstation,
+you'll need to have either `OpenMPI` or `mpich` installed, in addition to
+`automake`. On Mac, these can be installed with Homebrew:
 
 ```bash
 brew install mpich
