@@ -147,11 +147,11 @@ fn main() {
                     automaton::execute(task_list).collect()
                 }
                 Execution::Stupid(pool) => {
-                    automaton::execute_par_stupid(&pool, task_list).collect()
+                    automaton::execute_par_thread_pool(&pool, task_list).collect()
                 }
                 Execution::Rayon(pool) => {
                     pool.scope_fifo(|scope| {
-                        automaton::execute_par(scope, task_list)
+                        automaton::execute_par_rayon(scope, task_list)
                     }).collect()
                 }
             };

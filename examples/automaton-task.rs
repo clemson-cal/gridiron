@@ -1,4 +1,4 @@
-use gridiron::automaton::{execute_par, Automaton, Status};
+use gridiron::automaton::{execute_par_thread_pool, Automaton, Status};
 
 struct ConcatenateNearestNeighbors {
     key: u32,
@@ -52,15 +52,13 @@ impl Automaton for ConcatenateNearestNeighbors {
 
 fn main() {
     let group_size = 10;
+    let pool = gridiron::thread_pool::ThreadPool::new(4);
+    let group = (0..group_size).map(|n| ConcatenateNearestNeighbors::new(n, group_size));
 
-    rayon::scope_fifo(|scope| {
-        let group = (0..group_size).map(|n| ConcatenateNearestNeighbors::new(n, group_size));
-
-        assert_eq! {
-            group_size as usize,
-            execute_par(scope, group)
-            .inspect(|result| println!("{}", result))
-            .count()
-        };
-    });
+    assert_eq! {
+        group_size as usize,
+        execute_par_thread_pool(&pool, group)
+        .inspect(|result| println!("{}", result))
+        .count()
+    };
 }

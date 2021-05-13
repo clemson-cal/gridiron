@@ -53,16 +53,18 @@ impl Status {
 }
 
 /// An agent in a group of compute tasks that can communicate with its peers,
-/// and yields a computationally intensive data product. The data product can
-/// be another `Automaton` to enable folding of parallel executions. The model
-/// uses message passing rather than memory sharing: tasks own their data, and
-/// transfer ownership of the message content to the recipient. This strategy
-/// adheres to the principle of sharing memory by passing messages, rather
-/// than passing messages by sharing memory. A task's `value` method consumes
-/// `self`, allowing any internal memory buffers it uses for computation to be
-/// transferred to the `Automaton::Value` instance (which may be `Self`). Heap
-/// Heap usage in the `value` method (which is generally run on a worker
-/// thread by the executor) can thus be avoided entirely.
+/// and yields a computationally intensive data product.
+///
+/// The data product can be another `Automaton` to enable folding of parallel
+/// executions. The model uses message passing rather than memory sharing:
+/// tasks own their data, and transfer ownership of the message content to the
+/// recipient. This strategy adheres to the principle of sharing memory by
+/// passing messages, rather than passing messages by sharing memory. A task's
+/// `value` method consumes `self`, allowing any internal memory buffers it
+/// uses for computation to be transferred to the `Automaton::Value` instance
+/// (which may be `Self`). Heap Heap usage in the `value` method (which is
+/// generally run on a worker thread by the executor) can thus be avoided
+/// entirely.
 pub trait Automaton {
     /// The type of the key to uniquely identify this automaton within a
     /// group. Executors will generally require this type to be `Hash + Eq`,
@@ -115,7 +117,7 @@ where
     A: Automaton<Key = K, Value = V, Message = M>,
     K: Hash + Eq,
 {
-    let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
+    let (eligible_sink, eligible_source) = make_channels();
     let mut comm = NullCommunicator {};
     let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
@@ -124,13 +126,16 @@ where
     eligible_source.into_iter().map(|peer: A| peer.value())
 }
 
-/// Execute a group of tasks in parallel on the Rayon thread pool. As tasks
-/// are yielded from the input iterator (`flow`), their messages are gathered
-/// and delivered to any pending tasks. Those tasks which become eligible upon
-/// receiving a message are spawned into the Rayon thread pool. This function
-/// returns as soon as the input iterator is exhausted. The output iterator
-/// will then yield results until all the tasks have completed in the pool.
-pub fn execute_par<'a, I, A, K, V, M>(
+/// Execute a group of tasks in parallel on the Rayon thread pool.
+///
+/// As tasks are yielded from the input iterator (`flow`), their messages are
+/// gathered and delivered to any pending tasks. Those tasks which become
+/// eligible upon receiving a message are spawned into the Rayon thread pool.
+/// This function returns as soon as the input iterator is exhausted. The
+/// output iterator will then yield results until all the tasks have completed
+/// in the pool.
+#[cfg(feature = "rayon")]
+pub fn execute_par_rayon<'a, I, A, K, V, M>(
     scope: &rayon::ScopeFifo<'a>,
     flow: I,
 ) -> impl Iterator<Item = V>
@@ -140,11 +145,7 @@ where
     K: Hash + Eq,
     V: Send + 'a,
 {
-    assert! {
-        rayon::current_num_threads() >= 2,
-        "automaton::execute_par requires the Rayon pool to be running at least two threads"
-    };
-    let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
+    let (eligible_sink, eligible_source) = make_channels();
     let mut comm = NullCommunicator {};
     let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
@@ -158,8 +159,8 @@ where
     eligible_source.into_iter()
 }
 
-/// Execute a group of tasks in parallel using `gridiron`'s stupid scheduler.
-pub fn execute_par_stupid<I, A, K, V, M>(
+/// Execute a group of tasks in parallel using `gridiron`'s thread pool.
+pub fn execute_par_thread_pool<I, A, K, V, M>(
     pool: &crate::thread_pool::ThreadPool,
     flow: I,
 ) -> impl Iterator<Item = V>
@@ -169,11 +170,7 @@ where
     K: 'static + Hash + Eq,
     V: 'static + Send,
 {
-    assert! {
-        pool.num_threads() >= 2,
-        "automaton::execute_par_stupid requires the thread pool to be running at least two threads"
-    };
-    let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
+    let (eligible_sink, eligible_source) = make_channels();
     let mut comm = NullCommunicator {};
     let code = NullCoder::<(K, M)>::new();
     let work = |_: &K| 0;
@@ -203,7 +200,7 @@ where
     A: Automaton<Key = K, Value = V>,
     K: Hash + Eq,
 {
-    let (eligible_sink, eligible_source) = crossbeam_channel::unbounded();
+    let (eligible_sink, eligible_source) = make_channels();
     let work = |k: &K| work[k];
     let sink = |a: A| eligible_sink.send(a.value()).unwrap();
     coordinate(flow, comm, code, work, sink);
@@ -288,4 +285,14 @@ fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
         }
     }
     comm.next_time_stamp();
+}
+
+#[cfg(feature = "crossbeam_channel")]
+fn make_channels<T>() -> (crossbeam_channel::Sender<T>, crossbeam_channel::Receiver<T>) {
+    crossbeam_channel::unbounded()
+}
+
+#[cfg(not(feature = "crossbeam_channel"))]
+fn make_channels<T>() -> (std::sync::mpsc::Sender<T>, std::sync::mpsc::Receiver<T>) {
+    std::sync::mpsc::channel()
 }

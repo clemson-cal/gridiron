@@ -31,8 +31,6 @@ pub enum MeshLocation {
     Node,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-
 /// A patch is a mapping from a rectangular subset of a high-resolution index
 /// space (HRIS), to associated field values. The mapping is backed by an
 /// array of data, which is in general at a coarser level of granularity than
@@ -45,6 +43,8 @@ pub enum MeshLocation {
 /// the sampling level is coarser than the patch granularity, then the result
 /// is obtained by averaging over the region within the patch covered by the
 /// coarse cell.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Patch {
     /// The granularity level of this patch. Level 0 is the highest resolution.
     level: u32,
@@ -72,7 +72,7 @@ impl Patch {
         }
     }
 
-    /// Generate a patch of zeros over the given index space.
+    /// Generates a patch of zeros over the given index space.
     pub fn zeros<I: Into<IndexSpace>>(level: u32, num_fields: usize, space: I) -> Self {
         let space: IndexSpace = space.into();
         let data = vec![0.0; space.len() * num_fields];
@@ -85,7 +85,7 @@ impl Patch {
         }
     }
 
-    /// Generate a patch at a given level, covering the given space, with
+    /// Generates a patch at a given level, covering the given space, with
     /// values defined from a closure.
     pub fn from_scalar_function<I, F>(level: u32, space: I, f: F) -> Self
     where
@@ -95,7 +95,7 @@ impl Patch {
         Self::from_vector_function(level, space, |i| [f(i)])
     }
 
-    /// Generate a patch at a given level, covering the given space, with
+    /// Generates a patch at a given level, covering the given space, with
     /// values defined from a closure which returns a fixed-length array. The
     /// number of fields in the patch is inferred from the size of the fixed
     /// length array returned by the closure.
@@ -107,7 +107,7 @@ impl Patch {
         Self::from_slice_function(level, space, NUM_FIELDS, |i, s| s.clone_from_slice(&f(i)))
     }
 
-    /// Generate a patch at a given level, covering the given space, with
+    /// Generates a patch at a given level, covering the given space, with
     /// values defined from a closure which operates on mutable slices.
     pub fn from_slice_function<I, F>(level: u32, space: I, num_fields: usize, f: F) -> Self
     where
@@ -174,7 +174,7 @@ impl Patch {
         IndexSpace::from(self.rect.clone())
     }
 
-    /// Return the index space at the high-resolution level below this patch.
+    /// Returns the index space at the high-resolution level below this patch.
     pub fn high_resolution_space(&self) -> IndexSpace {
         self.index_space().refine_by(1 << self.level)
     }
@@ -185,7 +185,7 @@ impl Patch {
         self.index_space().refine_by(1 << self.level).into()
     }
 
-    /// Sample the field at the given level and index. The index measures
+    /// Samples the field at the given level and index. The index measures
     /// ticks at the target sampling level, not the HRIS.
     pub fn sample(&self, level: u32, index: (i64, i64), field: usize) -> f64 {
         match level.cmp(&self.level) {
@@ -210,9 +210,9 @@ impl Patch {
         }
     }
 
-    /// Sample all the fields in this patch at the given index and return the
-    /// result as a fixed-length array. The array size must be less than or
-    /// equal to the number of fields.
+    /// Samples all the fields in this patch at the given index and returns
+    /// the result as a fixed-length array. The array size must be less than
+    /// or equal to the number of fields.
     pub fn sample_vector<const NUM_FIELDS: usize>(
         &self,
         level: u32,
@@ -230,7 +230,7 @@ impl Patch {
         result
     }
 
-    /// Sample all the fields in this patch at the given index and write the
+    /// Samples all the fields in this patch at the given index and writes the
     /// result into the given slice. The slice must be at least as large as
     /// the number of fields.
     pub fn sample_slice(&self, level: u32, index: (i64, i64), result: &mut [f64]) {
@@ -239,9 +239,9 @@ impl Patch {
         }
     }
 
-    /// Return a slice of all data fields at the given index. This method does
-    /// not check if the index is logically in bounds, but will panic if a
-    /// memory location would have been out of bounds.
+    /// Returns a slice of all data fields at the given index. This method
+    /// does not check if the index is logically in bounds, but will panic if
+    /// a memory location would have been out of bounds.
     pub fn get_slice(&self, index: (i64, i64)) -> &[f64] {
         let s = self.index_space().row_major_offset(index);
         &self.data[s * self.num_fields..(s + 1) * self.num_fields]
@@ -252,7 +252,7 @@ impl Patch {
         &mut self.data[s * self.num_fields..(s + 1) * self.num_fields]
     }
 
-    /// Extract a subset of this patch and return it. This method panics if
+    /// Extracts a subset of this patch and return it. This method panics if
     /// the slice is out of bounds.
     pub fn extract<I: Into<IndexSpace>>(&self, subset: I) -> Self {
         let subset: IndexSpace = subset.into();
@@ -281,7 +281,7 @@ impl Patch {
             .for_each(|(index, slice)| f(index, slice))
     }
 
-    /// Map values from this patch into another one. The two patches must be
+    /// Maps values from this patch into another one. The two patches must be
     /// on the same level and have the same number of fields, but they do not
     /// need to have the same index space. Only the elements at the
     /// overlapping part of the index spaces are mapped; the remaining part of
