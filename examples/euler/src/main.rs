@@ -312,8 +312,8 @@ fn main_tcp_v3(opts: Opts) {
 #[cfg(feature = "mpi")]
 fn main_mpi(opts: Opts) {
     let threading = rust_mpi::environment::Threading::Multiple;
-    let (universe, _) = rust_mpi::initialize_with_threading(threading).unwrap();
-    let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
+    let (_mpi, _) = rust_mpi::initialize_with_threading(threading).unwrap();
+    let comm = gridiron::message::mpi::MpiCommunicator::new();
     run(opts, comm)
 }
 

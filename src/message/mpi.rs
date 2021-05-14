@@ -17,15 +17,16 @@ pub struct MpiCommunicator {
 }
 
 impl MpiCommunicator {
-    pub fn new(comm: SystemCommunicator) -> Self {
+    pub fn new() -> Self {
         let (send_sink, recv_sink): (Sender, Receiver) = mpsc::channel();
         let send_thread = thread::spawn(move || {
+            let comm = SystemCommunicator::world();
             for (rank, time_stamp, message) in recv_sink {
                 comm.process_at_rank(rank as i32).send_with_tag(&message[..], time_stamp)
             }
         });
         Self {
-            comm,
+            comm: SystemCommunicator::world(),
             send_sink: Some(send_sink),
             send_thread: Some(send_thread),
             time_stamp: 0,
