@@ -264,10 +264,11 @@ fn peer(rank: usize) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7070 + rank as u16)
 }
 
-fn main_tcp<F: Fn(usize, Vec<SocketAddr>) -> C, C: 'static + Communicator + Send>(
-    opts: Opts,
-    f: F,
-) {
+fn main_tcp<F, C>(opts: Opts, f: F)
+where
+    F: Fn(usize, Vec<SocketAddr>) -> C,
+    C: Communicator + Send + 'static,
+{
     let ranks: Range<usize> = 0..opts.num_threads;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
     let comms: Vec<_> = ranks.clone().map(|rank| f(rank, peers.clone())).collect();
@@ -307,12 +308,18 @@ fn main_tcp_v3(opts: Opts) {
     })
 }
 
-// fn main_mpi(opts: Opts) {
-//     let threading = mpi::environment::Threading::Multiple;
-//     let (universe, _) = mpi::initialize_with_threading(threading).unwrap();
-//     let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
-//     run(opts, comm)
-// }
+#[cfg(feature = "mpi")]
+fn main_mpi(opts: Opts) {
+    let threading = rust_mpi::environment::Threading::Multiple;
+    let (universe, _) = rust_mpi::initialize_with_threading(threading).unwrap();
+    let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
+    run(opts, comm)
+}
+
+#[cfg(not(feature = "mpi"))]
+fn main_mpi(_opts: Opts) {
+    println!("Error: compiled without MPI support");
+}
 
 fn main_mt(opts: Opts) {
     run(opts, NullCommunicator::new())
@@ -323,7 +330,7 @@ fn main() {
     println!("{:?}", opts);
 
     match opts.strategy.as_str() {
-        "mpi" => {}
+        "mpi" => main_mpi(opts),
         "tcp1" => main_tcp_v1(opts),
         "tcp2" => main_tcp_v2(opts),
         "tcp3" => main_tcp_v3(opts),
