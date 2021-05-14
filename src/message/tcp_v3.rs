@@ -7,7 +7,7 @@
 use super::comm::Communicator;
 use super::util;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::hash_map::{HashMap, Entry};
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
@@ -41,16 +41,39 @@ impl ConnectionPool {
         let (recv_s, recv_r): (RecvS, RecvR) = mpsc::channel();
 
         thread::spawn(move || {
-            let mut streams = HashMap::new();
+            // let mut streams = HashMap::new();
+            let mut streams: HashMap<SocketAddr, RecvS> = HashMap::new();
             for (address, message, tag) in send_r {
-                let stream = streams
-                    .entry(address)
-                    .or_insert_with(|| TcpStream::connect(address).unwrap());
-                let len = message.len().to_le_bytes();
-                let tag = tag.to_le_bytes();
-                stream.write_all(&len).unwrap();
-                stream.write_all(&tag).unwrap();
-                stream.write_all(&message).unwrap();
+
+                // let stream = streams
+                //     .entry(address)
+                //     .or_insert_with(|| TcpStream::connect(address).unwrap());
+                // let len = message.len().to_le_bytes();
+                // let tag = tag.to_le_bytes();
+                // stream.write_all(&len).unwrap();
+                // stream.write_all(&tag).unwrap();
+                // stream.write_all(&message).unwrap();
+
+                match streams.entry(address) {
+                    Entry::Vacant(entry) => {
+                        let (s, r) = mpsc::channel();
+                        s.send((message, tag)).unwrap();
+                        entry.insert(s);
+                        thread::spawn(move || {
+                            let mut stream = TcpStream::connect(address).unwrap();
+                            for (message, tag) in r {
+                                let len = message.len().to_le_bytes();
+                                let tag = tag.to_le_bytes();
+                                stream.write_all(&len).unwrap();
+                                stream.write_all(&tag).unwrap();
+                                stream.write_all(&message).unwrap();                                
+                            }
+                        });
+                    }
+                    Entry::Occupied(entry) => {
+                        entry.get().send((message, tag)).unwrap();
+                    }
+                }
             }
         });
 
