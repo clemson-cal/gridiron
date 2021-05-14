@@ -11,4 +11,5 @@ pub mod mpi;
 pub mod null;
 pub mod tcp_v1;
 pub mod tcp_v2;
+pub mod tcp_v3;
 pub mod util;

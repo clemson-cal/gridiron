@@ -10,11 +10,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::{mpsc, Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 
-const READ_TIMEOUT: Duration = Duration::from_nanos(100);
 type SendS = mpsc::Sender<(SocketAddr, Vec<u8>, usize)>;
 type SendR = mpsc::Receiver<(SocketAddr, Vec<u8>, usize)>;
 type RecvS = mpsc::Sender<(Vec<u8>, usize)>;
@@ -30,32 +28,19 @@ type RecvR = mpsc::Receiver<(Vec<u8>, usize)>;
 /// connections, it will try to accept an incoming connection on a short
 /// timeout.
 pub struct ConnectionPool {
-    alive: Arc<AtomicBool>,
     send_s: Option<SendS>,
     recv_r: Option<RecvR>,
-    send_thread: Option<thread::JoinHandle<()>>,
-    recv_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl ConnectionPool {
-    fn poll(stream: &mut TcpStream) -> Option<(Vec<u8>, usize)> {
-        util::read_usize_non_blocking(stream).map(|len| {
-            let tag = util::read_usize(stream);
-            (util::read_bytes_vec(stream, len), tag)
-        })
-    }
-
     /// Creates a `ConnectionPool` from a `TcpListener`. The listener is
     /// placed in a non-blocking accept mode, so the pre-existing blocking
     /// mode is overwritten.
     pub fn from_listener(listener: TcpListener) -> Self {
         let (send_s, send_r): (SendS, SendR) = mpsc::channel();
         let (recv_s, recv_r): (RecvS, RecvR) = mpsc::channel();
-        let alive = Arc::new(AtomicBool::new(true));
-        let keep_receiving = alive.clone();
 
-        // This thread takes the receiving end of the message sender channel.
-        let send_thread = thread::spawn(move || {
+        thread::spawn(move || {
             let mut streams = HashMap::new();
             for (address, message, tag) in send_r {
                 let stream = streams
@@ -66,30 +51,23 @@ impl ConnectionPool {
                 stream.write_all(&message).unwrap();
             }
         });
-        listener.set_nonblocking(true).unwrap();
 
-        // This thread takes the sending end of the message receiving channel.
-        let recv_thread = thread::spawn(move || {
-            let mut streams = Vec::new();
-            while keep_receiving.load(Ordering::Relaxed) {
-                for stream in &mut streams {
-                    if let Some((message, tag)) = Self::poll(stream) {
-                        recv_s.send((message, tag)).unwrap();
+        thread::spawn(move || {
+            for mut stream in listener.incoming().map(Result::unwrap) {
+                let recv_s = recv_s.clone();
+                thread::spawn(move || {
+                    loop {
+                        let len = util::read_usize(&mut stream);
+                        let tag = util::read_usize(&mut stream);
+                        recv_s.send((util::read_bytes_vec(&mut stream, len), tag)).unwrap()
                     }
-                }
-                if let Ok((stream, _)) = listener.accept() {
-                    stream.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
-                    streams.push(stream)
-                }
+                });
             }
         });
 
         Self {
-            alive,
             send_s: Some(send_s),
             recv_r: Some(recv_r),
-            send_thread: Some(send_thread),
-            recv_thread: Some(recv_thread),
         }
     }
 
@@ -105,15 +83,6 @@ impl ConnectionPool {
             .unwrap()
             .send((peer, message, tag))
             .unwrap()
-    }
-}
-
-impl Drop for ConnectionPool {
-    fn drop(&mut self) {
-        self.alive.swap(false, Ordering::Relaxed);
-        self.send_s.take().unwrap();
-        self.send_thread.take().unwrap().join().unwrap();
-        self.recv_thread.take().unwrap().join().unwrap();
     }
 }
 
