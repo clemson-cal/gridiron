@@ -7,7 +7,7 @@
 use super::comm::Communicator;
 use super::util;
 use std::cell::RefCell;
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::hash_map::{Entry, HashMap};
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
@@ -18,15 +18,24 @@ type SendR = mpsc::Receiver<(SocketAddr, Vec<u8>, usize)>;
 type RecvS = mpsc::Sender<(Vec<u8>, usize)>;
 type RecvR = mpsc::Receiver<(Vec<u8>, usize)>;
 
+#[derive(Clone, Copy)]
+pub enum SendThreads {
+    Single,
+    OnePerSocket,
+}
+
 /// Maintains a cache of ingoing and outgoing TCP connections.
 ///
 /// This object facilitates non-blocking sends and blocking receives from any
 /// peer. Communicating with a remote peer only opens a new connection on the
 /// on the first call; subsequent communications with that peer reuse the
 /// cached connection. It also facilitates receiving a message from any of the
-/// open connections. When no message can be read from one of the cached
-/// connections, it will try to accept an incoming connection on a short
-/// timeout.
+/// open connections. In this implementation, there is one thread per incoming
+/// connection, and one thread per outgoing connection.
+///
+/// __Note__: running threads are shamefully stranded. The shutdown logic will
+/// complicate the code a little, so I don't want to add it until (unless) the
+/// scheme is optimized.
 pub struct ConnectionPool {
     send_s: Option<SendS>,
     recv_r: Option<RecvR>,
@@ -36,43 +45,37 @@ impl ConnectionPool {
     /// Creates a `ConnectionPool` from a `TcpListener`. The listener is
     /// placed in a non-blocking accept mode, so the pre-existing blocking
     /// mode is overwritten.
-    pub fn from_listener(listener: TcpListener) -> Self {
+    pub fn from_listener(listener: TcpListener, mode: SendThreads) -> Self {
         let (send_s, send_r): (SendS, SendR) = mpsc::channel();
         let (recv_s, recv_r): (RecvS, RecvR) = mpsc::channel();
 
         thread::spawn(move || {
-            // let mut streams = HashMap::new();
-            let mut streams: HashMap<SocketAddr, RecvS> = HashMap::new();
+            let mut streams = HashMap::new();
+            let mut channels: HashMap<SocketAddr, RecvS> = HashMap::new();
             for (address, message, tag) in send_r {
-
-                // let stream = streams
-                //     .entry(address)
-                //     .or_insert_with(|| TcpStream::connect(address).unwrap());
-                // let len = message.len().to_le_bytes();
-                // let tag = tag.to_le_bytes();
-                // stream.write_all(&len).unwrap();
-                // stream.write_all(&tag).unwrap();
-                // stream.write_all(&message).unwrap();
-
-                match streams.entry(address) {
-                    Entry::Vacant(entry) => {
-                        let (s, r) = mpsc::channel();
-                        s.send((message, tag)).unwrap();
-                        entry.insert(s);
-                        thread::spawn(move || {
-                            let mut stream = TcpStream::connect(address).unwrap();
-                            for (message, tag) in r {
-                                let len = message.len().to_le_bytes();
-                                let tag = tag.to_le_bytes();
-                                stream.write_all(&len).unwrap();
-                                stream.write_all(&tag).unwrap();
-                                stream.write_all(&message).unwrap();                                
-                            }
-                        });
+                match mode {
+                    SendThreads::Single => {
+                        let mut stream = streams
+                            .entry(address)
+                            .or_insert_with(|| TcpStream::connect(address).unwrap());
+                        Self::write_message(&mut stream, message, tag)
                     }
-                    Entry::Occupied(entry) => {
-                        entry.get().send((message, tag)).unwrap();
-                    }
+                    SendThreads::OnePerSocket => match channels.entry(address) {
+                        Entry::Vacant(entry) => {
+                            let (s, r) = mpsc::channel();
+                            s.send((message, tag)).unwrap();
+                            entry.insert(s);
+                            thread::spawn(move || {
+                                let mut stream = TcpStream::connect(address).unwrap();
+                                for (message, tag) in r {
+                                    Self::write_message(&mut stream, message, tag)
+                                }
+                            });
+                        }
+                        Entry::Occupied(entry) => {
+                            entry.get().send((message, tag)).unwrap();
+                        }
+                    },
                 }
             }
         });
@@ -81,11 +84,7 @@ impl ConnectionPool {
             for mut stream in listener.incoming().map(Result::unwrap) {
                 let recv_s = recv_s.clone();
                 thread::spawn(move || loop {
-                    let len = util::read_usize(&mut stream);
-                    let tag = util::read_usize(&mut stream);
-                    recv_s
-                        .send((util::read_bytes_vec(&mut stream, len), tag))
-                        .unwrap()
+                    recv_s.send(Self::read_message(&mut stream)).unwrap()
                 });
             }
         });
@@ -109,6 +108,20 @@ impl ConnectionPool {
             .send((peer, message, tag))
             .unwrap()
     }
+
+    fn write_message(stream: &mut TcpStream, message: Vec<u8>, tag: usize) {
+        let len = message.len().to_le_bytes();
+        let tag = tag.to_le_bytes();
+        stream.write_all(&len).unwrap();
+        stream.write_all(&tag).unwrap();
+        stream.write_all(&message).unwrap();
+    }
+
+    fn read_message(stream: &mut TcpStream) -> (Vec<u8>, usize) {
+        let len = util::read_usize(stream);
+        let tag = util::read_usize(stream);
+        (util::read_bytes_vec(stream, len), tag)
+    }
 }
 
 pub struct TcpCommunicator {
@@ -120,9 +133,9 @@ pub struct TcpCommunicator {
 }
 
 impl TcpCommunicator {
-    pub fn new(rank: usize, peers: Vec<SocketAddr>) -> Self {
+    pub fn new(rank: usize, peers: Vec<SocketAddr>, mode: SendThreads) -> Self {
         let listener = TcpListener::bind(peers[rank]).unwrap();
-        let connections = RefCell::new(ConnectionPool::from_listener(listener));
+        let connections = RefCell::new(ConnectionPool::from_listener(listener, mode));
         Self {
             rank,
             peers,

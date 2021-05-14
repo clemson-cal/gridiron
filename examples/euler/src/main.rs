@@ -32,6 +32,9 @@ struct Opts {
     )]
     strategy: String,
 
+    #[clap(short = 'm', long)]
+    multiple_send_threads: bool,
+
     #[clap(short = 'n', long, default_value = "1000")]
     grid_resolution: usize,
 
@@ -294,8 +297,13 @@ fn main_tcp_v2(opts: Opts) {
 }
 
 fn main_tcp_v3(opts: Opts) {
+    let mode = if opts.multiple_send_threads {
+        tcp_v3::SendThreads::OnePerSocket
+    } else {
+        tcp_v3::SendThreads::Single
+    };
     main_tcp(opts, |rank, peers| {
-        tcp_v3::TcpCommunicator::new(rank, peers)
+        tcp_v3::TcpCommunicator::new(rank, peers, mode)
     })
 }
 
