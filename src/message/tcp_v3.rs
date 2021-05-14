@@ -46,8 +46,10 @@ impl ConnectionPool {
                 let stream = streams
                     .entry(address)
                     .or_insert_with(|| TcpStream::connect(address).unwrap());
-                stream.write_all(&message.len().to_le_bytes()).unwrap();
-                stream.write_all(&tag.to_le_bytes()).unwrap();
+                let len = message.len().to_le_bytes();
+                let tag = tag.to_le_bytes();
+                stream.write_all(&len).unwrap();
+                stream.write_all(&tag).unwrap();
                 stream.write_all(&message).unwrap();
             }
         });
@@ -55,12 +57,12 @@ impl ConnectionPool {
         thread::spawn(move || {
             for mut stream in listener.incoming().map(Result::unwrap) {
                 let recv_s = recv_s.clone();
-                thread::spawn(move || {
-                    loop {
-                        let len = util::read_usize(&mut stream);
-                        let tag = util::read_usize(&mut stream);
-                        recv_s.send((util::read_bytes_vec(&mut stream, len), tag)).unwrap()
-                    }
+                thread::spawn(move || loop {
+                    let len = util::read_usize(&mut stream);
+                    let tag = util::read_usize(&mut stream);
+                    recv_s
+                        .send((util::read_bytes_vec(&mut stream, len), tag))
+                        .unwrap()
                 });
             }
         });

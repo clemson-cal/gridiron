@@ -1,9 +1,9 @@
 pub mod hydro;
 pub mod solvers;
 
-use clap::{AppSettings, Clap};
 use crate::hydro::euler2d::Primitive;
 use crate::solvers::euler2d_pcm::{Mesh, PatchUpdate};
+use clap::{AppSettings, Clap};
 use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
 use gridiron::index_space::range2d;
@@ -24,7 +24,12 @@ struct Opts {
     #[clap(short = 't', long, default_value = "1")]
     num_threads: usize,
 
-    #[clap(short = 's', long, default_value = "serial", about = "serial|stupid|rayon|tcp1|tcp2|tcp3|mpi")]
+    #[clap(
+        short = 's',
+        long,
+        default_value = "serial",
+        about = "serial|stupid|rayon|tcp1|tcp2|tcp3|mpi"
+    )]
     strategy: String,
 
     #[clap(short = 'n', long, default_value = "1000")]
@@ -195,7 +200,7 @@ fn run(opts: Opts, mut comm: impl Communicator) {
                 .build()
                 .unwrap(),
         ),
-        "tcp1"|"tcp2"|"tcp3"|"mpi" => Execution::Distributed,
+        "tcp1" | "tcp2" | "tcp3" | "mpi" => Execution::Distributed,
         _ => {
             eprintln!("Error: --strategy options are [serial|stupid|rayon|tcp1|tcp2||mpi]");
             return;
@@ -209,17 +214,13 @@ fn run(opts: Opts, mut comm: impl Communicator) {
 
         for _ in 0..opts.fold {
             task_list = match executor {
-                Execution::Serial => {
-                    automaton::execute(task_list).collect()
-                }
+                Execution::Serial => automaton::execute(task_list).collect(),
                 Execution::Stupid(ref pool) => {
                     automaton::execute_thread_pool(&pool, task_list).collect()
                 }
-                Execution::Rayon(ref pool) => {
-                    pool.scope(|scope| {
-                        automaton::execute_rayon(scope, task_list)
-                    }).collect()
-                }
+                Execution::Rayon(ref pool) => pool
+                    .scope(|scope| automaton::execute_rayon(scope, task_list))
+                    .collect(),
                 Execution::Distributed => {
                     automaton::execute_comm(&mut comm, &code, &work, None, task_list).collect()
                 }
@@ -260,13 +261,13 @@ fn peer(rank: usize) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7070 + rank as u16)
 }
 
-fn main_tcp<F: Fn(usize, Vec<SocketAddr>) -> C, C: 'static + Communicator + Send>(opts: Opts, f: F) {
+fn main_tcp<F: Fn(usize, Vec<SocketAddr>) -> C, C: 'static + Communicator + Send>(
+    opts: Opts,
+    f: F,
+) {
     let ranks: Range<usize> = 0..opts.num_threads;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
-    let comms: Vec<_> = ranks
-        .clone()
-        .map(|rank| f(rank, peers.clone()))
-        .collect();
+    let comms: Vec<_> = ranks.clone().map(|rank| f(rank, peers.clone())).collect();
     let procs: Vec<_> = comms
         .into_iter()
         .map(|comm| {
@@ -281,15 +282,21 @@ fn main_tcp<F: Fn(usize, Vec<SocketAddr>) -> C, C: 'static + Communicator + Send
 }
 
 fn main_tcp_v1(opts: Opts) {
-    main_tcp(opts, |rank, peers| tcp_v1::TcpCommunicator::new(rank, peers))
+    main_tcp(opts, |rank, peers| {
+        tcp_v1::TcpCommunicator::new(rank, peers)
+    })
 }
 
 fn main_tcp_v2(opts: Opts) {
-    main_tcp(opts, |rank, peers| tcp_v2::TcpCommunicator::new(rank, peers))
+    main_tcp(opts, |rank, peers| {
+        tcp_v2::TcpCommunicator::new(rank, peers)
+    })
 }
 
 fn main_tcp_v3(opts: Opts) {
-    main_tcp(opts, |rank, peers| tcp_v3::TcpCommunicator::new(rank, peers))
+    main_tcp(opts, |rank, peers| {
+        tcp_v3::TcpCommunicator::new(rank, peers)
+    })
 }
 
 // fn main_mpi(opts: Opts) {

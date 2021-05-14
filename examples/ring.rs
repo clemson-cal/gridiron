@@ -5,7 +5,7 @@ use std::ops::Range;
 use std::thread;
 
 fn peer(rank: usize) -> SocketAddr {
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000 + rank as u16)
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7070 + rank as u16)
 }
 
 fn main() {
