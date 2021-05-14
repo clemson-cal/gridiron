@@ -8,7 +8,7 @@ use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, null::NullCommunicator, tcp::TcpCommunicator};
+use gridiron::message::{comm::Communicator, null::NullCommunicator, tcp_v1, tcp_v2};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::thread_pool;
@@ -24,7 +24,7 @@ struct Opts {
     #[clap(short = 't', long, default_value = "1")]
     num_threads: usize,
 
-    #[clap(short = 's', long, default_value = "serial", about = "serial|stupid|rayon|tcp|mpi")]
+    #[clap(short = 's', long, default_value = "serial", about = "serial|stupid|rayon|tcp1|tcp2|mpi")]
     strategy: String,
 
     #[clap(short = 'n', long, default_value = "1000")]
@@ -195,9 +195,9 @@ fn run(opts: Opts, mut comm: impl Communicator) {
                 .build()
                 .unwrap(),
         ),
-        "tcp"|"mpi" => Execution::Distributed,
+        "tcp1"|"tcp2"|"mpi" => Execution::Distributed,
         _ => {
-            eprintln!("Error: --strategy options are [serial|stupid|rayon|tcp|mpi]");
+            eprintln!("Error: --strategy options are [serial|stupid|rayon|tcp1|tcp2||mpi]");
             return;
         }
     };
@@ -260,12 +260,12 @@ fn peer(rank: usize) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7070 + rank as u16)
 }
 
-fn main_tcp(opts: Opts) {
+fn main_tcp_v1(opts: Opts) {
     let ranks: Range<usize> = 0..opts.num_threads;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
     let comms: Vec<_> = ranks
         .clone()
-        .map(|rank| TcpCommunicator::new(rank, peers.clone()))
+        .map(|rank| tcp_v1::TcpCommunicator::new(rank, peers.clone()))
         .collect();
     let procs: Vec<_> = comms
         .into_iter()
@@ -280,12 +280,32 @@ fn main_tcp(opts: Opts) {
     }
 }
 
-fn main_mpi(opts: Opts) {
-    let threading = mpi::environment::Threading::Multiple;
-    let (universe, _) = mpi::initialize_with_threading(threading).unwrap();
-    let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
-    run(opts, comm)
+fn main_tcp_v2(opts: Opts) {
+    let ranks: Range<usize> = 0..opts.num_threads;
+    let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
+    let comms: Vec<_> = ranks
+        .clone()
+        .map(|rank| tcp_v2::TcpCommunicator::new(rank, peers.clone()))
+        .collect();
+    let procs: Vec<_> = comms
+        .into_iter()
+        .map(|comm| {
+            let opts = opts.clone();
+            thread::spawn(|| run(opts, comm))
+        })
+        .collect();
+
+    for process in procs {
+        process.join().unwrap()
+    }
 }
+
+// fn main_mpi(opts: Opts) {
+//     let threading = mpi::environment::Threading::Multiple;
+//     let (universe, _) = mpi::initialize_with_threading(threading).unwrap();
+//     let comm = gridiron::message::mpi::MpiCommunicator::new(universe.world());
+//     run(opts, comm)
+// }
 
 fn main_mt(opts: Opts) {
     run(opts, NullCommunicator::new())
@@ -297,10 +317,13 @@ fn main() {
 
     match opts.strategy.as_str() {
         "mpi" => {
-            main_mpi(opts)
+            // main_mpi(opts)
         }
-        "tcp" => {
-            main_tcp(opts)
+        "tcp1" => {
+            main_tcp_v1(opts)
+        }
+        "tcp2" => {
+            main_tcp_v2(opts)
         }
         _ => {
             main_mt(opts)
