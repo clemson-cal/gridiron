@@ -8,61 +8,20 @@ use super::comm::Communicator;
 use super::util;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-const TIMEOUT: Duration = Duration::from_millis(1);
-type Sender = mpsc::Sender<(SocketAddr, Vec<u8>, usize)>;
-type Receiver = mpsc::Receiver<(SocketAddr, Vec<u8>, usize)>;
+const READ_TIMEOUT: Duration = Duration::from_nanos(100);
+type SendS = mpsc::Sender<(SocketAddr, Vec<u8>, usize)>;
+type SendR = mpsc::Receiver<(SocketAddr, Vec<u8>, usize)>;
+type RecvS = mpsc::Sender<(Vec<u8>, usize)>;
+type RecvR = mpsc::Receiver<(Vec<u8>, usize)>;
 
-/// A receiver that can be polled to make progress toward reading a complete
-/// message from a `TcpStream`.
-pub struct NonBlockingStream {
-    stream: TcpStream,
-    read_state: Option<(usize, Vec<u8>, usize)>,
-}
-
-impl NonBlockingStream {
-    /// Creates a `NonBlockingStream` from an ordinary `TcpStream`. The stream
-    /// is placed in a non-blocking read mode, so the pre-existing timeout is
-    /// overwritten.
-    pub fn from_stream(stream: TcpStream) -> Self {
-        stream.set_read_timeout(Some(TIMEOUT)).unwrap();
-        Self {
-            stream,
-            read_state: None,
-        }
-    }
-
-    /// Returns a message, if one is finished being read from the inner
-    /// stream. Either way this function tries to make progress reading a
-    /// message out of the stream.
-    pub fn poll(&mut self) -> Option<(Vec<u8>, usize)> {
-        match self.read_state.take() {
-            None => {
-                if let Some(len) = util::read_usize_non_blocking(&mut self.stream) {
-                    let tag = util::read_usize(&mut self.stream);
-                    self.read_state = Some((0, vec![0; len], tag));
-                    self.poll()
-                } else {
-                    None
-                }
-            }
-            Some((mut cursor, mut buffer, tag)) => {
-                cursor += self.stream.read(&mut buffer[cursor..]).unwrap_or(0);
-                if cursor == buffer.len() {
-                    Some((buffer, tag))
-                } else {
-                    self.read_state = Some((cursor, buffer, tag));
-                    None
-                }
-            }
-        }
-    }
-}
 
 /// Maintains a cache of ingoing and outgoing TCP connections.
 ///
@@ -74,21 +33,35 @@ impl NonBlockingStream {
 /// connections, it will try to accept an incoming connection on a short
 /// timeout.
 pub struct ConnectionPool {
-    listener: TcpListener,
-    streams: Vec<NonBlockingStream>,
-    message_sender: Option<Sender>,
-    message_thread: Option<thread::JoinHandle<()>>,
+    alive: Arc<AtomicBool>,
+    send_s: Option<SendS>,
+    recv_r: Option<RecvR>,
+    send_thread: Option<thread::JoinHandle<()>>,
+    recv_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl ConnectionPool {
+
+    fn poll(stream: &mut TcpStream) -> Option<(Vec<u8>, usize)> {
+        util::read_usize_non_blocking(stream).map(|len| {
+            let tag = util::read_usize(stream);
+            (util::read_bytes_vec(stream, len), tag)
+        })
+    }
+
     /// Creates a `ConnectionPool` from a `TcpListener`. The listener is
     /// placed in a non-blocking accept mode, so the pre-existing blocking
     /// mode is overwritten.
     pub fn from_listener(listener: TcpListener) -> Self {
-        let (message_sender, message_recv): (Sender, Receiver) = mpsc::channel();
-        let message_thread = thread::spawn(move || {
+        let (send_s, send_r): (SendS, SendR) = mpsc::channel();
+        let (recv_s, recv_r): (RecvS, RecvR) = mpsc::channel();
+        let alive = Arc::new(AtomicBool::new(true));
+        let keep_receiving = alive.clone();
+
+        // This thread takes the receiving end of the message sender channel.
+        let send_thread = thread::spawn(move || {
             let mut streams = HashMap::new();
-            for (address, message, tag) in message_recv {
+            for (address, message, tag) in send_r {
                 let stream = streams
                     .entry(address)
                     .or_insert_with(|| TcpStream::connect(address).unwrap());
@@ -98,31 +71,40 @@ impl ConnectionPool {
             }
         });
         listener.set_nonblocking(true).unwrap();
+
+        // This thread takes the sending end of the message receiving channel.
+        let recv_thread = thread::spawn(move || {
+            let mut streams = Vec::new();
+            while keep_receiving.load(Ordering::Relaxed) {
+                for stream in &mut streams {
+                    if let Some((message, tag)) = Self::poll(stream) {
+                        recv_s.send((message, tag)).unwrap();
+                    }
+                }
+                if let Ok((stream, _)) = listener.accept() {
+                    stream.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
+                    streams.push(stream)
+                }
+            }
+        });
+
         Self {
-            listener,
-            streams: Vec::new(),
-            message_sender: Some(message_sender),
-            message_thread: Some(message_thread),
+            alive,
+            send_s: Some(send_s),
+            recv_r: Some(recv_r),
+            send_thread: Some(send_thread),
+            recv_thread: Some(recv_thread),
         }
     }
 
     /// Initiates a blocking receive from any peer.
     pub fn recv(&mut self) -> (Vec<u8>, usize) {
-        loop {
-            for stream in &mut self.streams {
-                if let Some(message) = stream.poll() {
-                    return message;
-                }
-            }
-            if let Ok((stream, _)) = self.listener.accept() {
-                self.streams.push(NonBlockingStream::from_stream(stream))
-            }
-        }
+        self.recv_r.as_ref().unwrap().recv().unwrap()
     }
 
     /// Initiates a non-blocking send to a particular peer.
     pub fn send(&mut self, peer: SocketAddr, message: Vec<u8>, tag: usize) {
-        self.message_sender
+        self.send_s
             .as_ref()
             .unwrap()
             .send((peer, message, tag))
@@ -132,8 +114,10 @@ impl ConnectionPool {
 
 impl Drop for ConnectionPool {
     fn drop(&mut self) {
-        self.message_sender.take().unwrap();
-        self.message_thread.take().unwrap().join().unwrap();
+        self.alive.swap(false, Ordering::Relaxed);
+        self.send_s.take().unwrap();
+        self.send_thread.take().unwrap().join().unwrap();
+        self.recv_thread.take().unwrap().join().unwrap();
     }
 }
 
