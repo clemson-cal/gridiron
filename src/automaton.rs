@@ -289,6 +289,7 @@ fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
             seen.insert(a.key(), a);
         }
     }
+    assert!(undelivered.is_empty());
 
     // Receive messages from peers until all tasks have been evaluated.
     while !seen.is_empty() {

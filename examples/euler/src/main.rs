@@ -150,7 +150,7 @@ enum Execution {
     Serial,
     Stupid(gridiron::thread_pool::ThreadPool),
     Rayon(rayon::ThreadPool),
-    Distributed(gridiron::thread_pool::ThreadPool),
+    Distributed,
 }
 
 fn run(opts: Opts, mut comm: impl Communicator) {
@@ -203,7 +203,7 @@ fn run(opts: Opts, mut comm: impl Communicator) {
                 .build()
                 .unwrap(),
         ),
-        "tcp1" | "tcp2" | "tcp3" | "mpi" => Execution::Distributed(thread_pool::ThreadPool::new(1)),
+        "tcp1" | "tcp2" | "tcp3" | "mpi" => Execution::Distributed,
         _ => {
             eprintln!("Error: --strategy options are [serial|stupid|rayon|tcp1|tcp2||mpi]");
             return;
@@ -224,8 +224,8 @@ fn run(opts: Opts, mut comm: impl Communicator) {
                 Execution::Rayon(ref pool) => pool
                     .scope(|scope| automaton::execute_rayon(scope, task_list))
                     .collect(),
-                Execution::Distributed(ref pool) => {
-                    automaton::execute_comm(&mut comm, &code, &work, Some(pool), task_list)
+                Execution::Distributed => {
+                    automaton::execute_comm(&mut comm, &code, &work, None, task_list)
                         .collect()
                 }
             };
