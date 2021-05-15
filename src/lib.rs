@@ -54,6 +54,7 @@ pub mod interval_map;
 pub mod interval_set;
 pub mod meshing;
 pub mod message;
+pub mod mpi;
 pub mod num_vec;
 pub mod overlap;
 pub mod patch;

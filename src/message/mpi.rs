@@ -1,8 +1,6 @@
 #![cfg(feature = "mpi")]
-use super::comm;
-use mpi::point_to_point::{Destination, Source};
-use mpi::topology::{Communicator, SystemCommunicator};
-use mpi::collective::CommunicatorCollectives;
+use crate::message::comm;
+use crate::mpi;
 use std::sync::mpsc;
 use std::thread;
 
@@ -10,7 +8,6 @@ type Sender = mpsc::Sender<(usize, i32, Vec<u8>)>;
 type Receiver = mpsc::Receiver<(usize, i32, Vec<u8>)>;
 
 pub struct MpiCommunicator {
-    comm: SystemCommunicator,
     send_sink: Option<Sender>,
     send_thread: Option<thread::JoinHandle<()>>,
     time_stamp: i32,
@@ -20,31 +17,35 @@ impl MpiCommunicator {
     pub fn new() -> Self {
         let (send_sink, recv_sink): (Sender, Receiver) = mpsc::channel();
         let send_thread = thread::spawn(move || {
-            let comm = SystemCommunicator::world();
             for (rank, time_stamp, message) in recv_sink {
-                comm.process_at_rank(rank as i32).send_with_tag(&message[..], time_stamp)
+                unsafe {
+                    mpi::send(
+                        message.as_ptr(),
+                        message.len() as i32,
+                        rank as i32,
+                        time_stamp as i32);
+                }
             }
         });
         Self {
-            comm: SystemCommunicator::world(),
             send_sink: Some(send_sink),
             send_thread: Some(send_thread),
             time_stamp: 0,
         }
     }
-
-    pub fn barrier(&self) {
-        self.comm.barrier()
-    }
 }
 
 impl comm::Communicator for MpiCommunicator {
     fn rank(&self) -> usize {
-        self.comm.rank() as usize
+        unsafe {
+            mpi::comm_rank() as usize
+        }
     }
 
     fn size(&self) -> usize {
-        self.comm.size() as usize
+        unsafe {
+            mpi::comm_size() as usize
+        }
     }
 
     fn send(&self, rank: usize, message: Vec<u8>) {
@@ -56,7 +57,12 @@ impl comm::Communicator for MpiCommunicator {
     }
 
     fn recv(&self) -> Vec<u8> {
-        self.comm.any_process().receive_vec_with_tag(self.time_stamp).0
+        unsafe {
+            let status = mpi::probe_tag(self.time_stamp as i32);
+            let mut buffer = vec![0; status.count as usize];
+            mpi::recv(buffer.as_mut_ptr(), buffer.len() as i32, status.source, status.tag);
+            buffer
+        }
     }
 
     fn next_time_stamp(&mut self) {

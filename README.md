@@ -56,11 +56,4 @@ MPI is not required for distributed parallel calculations, because there is a
 built-in message-passing module based on TCP sockets.
 
 If you want to use MPI on an HPC cluster, just make sure you've loaded one of
-their MPI modules with e.g. `module load mpi`. On your laptop or workstation,
-you'll need to have either `OpenMPI` or `mpich` installed, in addition to
-`automake`. On Mac, these can be installed with Homebrew:
-
-```bash
-brew install mpich
-brew install automake
-```
+their MPI modules with e.g. `module load mpi`, and you're using the same MPI version at run time as when you build the code.
