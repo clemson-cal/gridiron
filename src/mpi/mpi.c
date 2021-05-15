@@ -13,6 +13,10 @@ int init() {
     return level == MPI_THREAD_MULTIPLE;
 }
 
+void barrier() {
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
 void finalize() {
     MPI_Finalize();
 }
