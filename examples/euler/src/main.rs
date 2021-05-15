@@ -8,7 +8,7 @@ use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, null::NullCommunicator, tcp_v1, tcp_v2, tcp_v3};
+use gridiron::message::{comm::Communicator, null::NullCommunicator, tcp};
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::thread_pool;
@@ -28,7 +28,7 @@ struct Opts {
         short = 's',
         long,
         default_value = "serial",
-        about = "serial|stupid|rayon|tcp1|tcp2|tcp3|mpi"
+        about = "serial|stupid|rayon|tcp|mpi"
     )]
     strategy: String,
 
@@ -203,9 +203,9 @@ fn run(opts: Opts, mut comm: impl Communicator) {
                 .build()
                 .unwrap(),
         ),
-        "tcp1" | "tcp2" | "tcp3" | "mpi" => Execution::Distributed,
+        "tcp" | "mpi" => Execution::Distributed,
         _ => {
-            eprintln!("Error: --strategy options are [serial|stupid|rayon|tcp1|tcp2||mpi]");
+            eprintln!("Error: --strategy options are [serial|stupid|rayon|tcp|mpi]");
             return;
         }
     };
@@ -265,14 +265,10 @@ fn peer(rank: usize) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7070 + rank as u16)
 }
 
-fn main_tcp<F, C>(opts: Opts, f: F)
-where
-    F: Fn(usize, Vec<SocketAddr>) -> C,
-    C: Communicator + Send + 'static,
-{
+fn main_tcp(opts: Opts) {
     let ranks: Range<usize> = 0..opts.num_threads;
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
-    let comms: Vec<_> = ranks.clone().map(|rank| f(rank, peers.clone())).collect();
+    let comms: Vec<_> = ranks.clone().map(|rank| tcp::TcpCommunicator::new(rank, peers.clone())).collect();
     let procs: Vec<_> = comms
         .into_iter()
         .map(|comm| {
@@ -286,35 +282,12 @@ where
     }
 }
 
-fn main_tcp_v1(opts: Opts) {
-    main_tcp(opts, |rank, peers| {
-        tcp_v1::TcpCommunicator::new(rank, peers)
-    })
-}
-
-fn main_tcp_v2(opts: Opts) {
-    main_tcp(opts, |rank, peers| {
-        tcp_v2::TcpCommunicator::new(rank, peers)
-    })
-}
-
-fn main_tcp_v3(opts: Opts) {
-    let mode = if opts.multiple_send_threads {
-        tcp_v3::SendThreads::OnePerSocket
-    } else {
-        tcp_v3::SendThreads::Single
-    };
-    main_tcp(opts, |rank, peers| {
-        tcp_v3::TcpCommunicator::new(rank, peers, mode)
-    })
-}
-
 #[cfg(feature = "mpi")]
 fn main_mpi(opts: Opts) {
-    let threading = rust_mpi::environment::Threading::Multiple;
-    let (_mpi, _) = rust_mpi::initialize_with_threading(threading).unwrap();
+    unsafe { gridiron::mpi::init(); }
     let comm = gridiron::message::mpi::MpiCommunicator::new();
-    run(opts, comm)
+    run(opts, comm);
+    unsafe { gridiron::mpi::finalize(); }
 }
 
 #[cfg(not(feature = "mpi"))]
@@ -328,13 +301,10 @@ fn main_mt(opts: Opts) {
 
 fn main() {
     let opts = Opts::parse();
-    println!("{:?}", opts);
 
     match opts.strategy.as_str() {
         "mpi" => main_mpi(opts),
-        "tcp1" => main_tcp_v1(opts),
-        "tcp2" => main_tcp_v2(opts),
-        "tcp3" => main_tcp_v3(opts),
+        "tcp" => main_tcp(opts),
         _ => main_mt(opts),
     }
 }
