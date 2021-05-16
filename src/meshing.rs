@@ -10,10 +10,8 @@ use crate::rect_map::{Rectangle, RectangleMap};
 
 /// A trait for a container that can respond to queries for a patch overlying
 /// a point.
-///
 pub trait PatchQuery {
     /// Return a patch containing the given point, if one exists.
-    ///
     fn patch_containing_point(&self, point: (i64, i64)) -> Option<&Patch>;
 }
 
@@ -30,7 +28,7 @@ impl PatchQuery for RectangleMap<i64, Patch> {
     }
 }
 
-/// Fill guard zone values in a mutable patch by sampling data from other
+/// Fills guard zone values in a mutable patch by sampling data from other
 /// patches in `PatchQuery` object. Indexes contained in the
 /// `valid_index_space` are not touched.
 ///
@@ -39,7 +37,6 @@ impl PatchQuery for RectangleMap<i64, Patch> {
 ///
 /// __WARNING__: this function currently neglects the patch corners. The
 /// corners are needed for MHD and viscous fluxes.
-///
 pub fn extend_patch_mut<P, G>(
     patch: &mut Patch,
     valid_index_space: &IndexSpace,
@@ -76,20 +73,16 @@ pub fn extend_patch_mut<P, G>(
 /// `B` means that `A` is _upstream_ of `B`: guard zones from `A` are required
 /// to extend `B`. In parallel executions, messages are passed in the
 /// direction of the arrows, from `A` to `B` in this case.
-///
 pub trait GraphTopology {
     /// The type of key used to identify vertices
-    ///
     type Key;
 
     /// An additional type parameter given to `Self::adjacency_list`. In
     /// contect, this is probably the number of guard zones, which in general
     /// will influence which other patches are neighbors.
-    ///
     type Parameter;
 
     /// Return an adjacency list derived from this container.
-    ///
     fn adjacency_list(&self, parameter: Self::Parameter) -> AdjacencyList<Self::Key>;
 }
 
@@ -114,11 +107,11 @@ impl GraphTopology for RectangleMap<i64, Patch> {
     }
 }
 
-/// Returns the integer square root, `floor(sqrt(n))`, of an unsigned integer
+/// Computes the integer square root, `floor(sqrt(n))`, of an unsigned integer
 /// `n`. Based on [Newton's method][1].
 ///
 /// [1]: https://en.wikipedia.org/wiki/Integer_square_root
-pub fn integer_square_root(n: u64) -> u64 {
+pub fn integer_square_root(n: usize) -> usize {
     let mut x0 = n >> 1;
 
     if x0 == 0 {
@@ -134,9 +127,9 @@ pub fn integer_square_root(n: u64) -> u64 {
     }
 }
 
-/// Returns the prime factors of an unsigned integer. Based on Pollard’s Rho
+/// Find the prime factors of an unsigned integer. Based on Pollard’s Rho
 /// algorithm.
-pub fn prime_factors(mut n: u64) -> Vec<u64> {
+pub fn prime_factors(mut n: usize) -> Vec<usize> {
     let mut result = Vec::new();
 
     while n % 2 == 0 {
@@ -157,6 +150,27 @@ pub fn prime_factors(mut n: u64) -> Vec<u64> {
         result.push(n)
     }
     result
+}
+
+/// Factors a target number of total blocks (`count`) (say 200) into
+/// rectangular dimensions, (`[20, 10]` for `num_dims=2` or `[10, 10, 2]` for
+/// `num_dims=3`). In context, `count` will be the number of tasks in a
+/// calculation, and `num_dims` is the rank of the arrays. This function is
+/// like `MPI_Dims_create`.
+pub fn block_dims(count: usize, num_dims: usize) -> Vec<usize> {
+    let factors = prime_factors(count);
+    (0..num_dims)
+        .map(|dim| {
+            if factors.is_empty() {
+                1
+            } else {
+                factors[dim..]
+                    .chunks(num_dims)
+                    .map(|chunk| chunk[0])
+                    .product()
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -184,5 +198,19 @@ mod tests {
         assert_eq!(prime_factors(9), vec![3, 3]);
         assert_eq!(prime_factors(12), vec![2, 2, 3]);
         assert_eq!(prime_factors(100), vec![2, 2, 5, 5]);
+    }
+
+    #[test]
+    fn block_dims_works() {
+        assert_eq!(block_dims(1, 2), vec![1, 1]);
+        assert_eq!(block_dims(1, 3), vec![1, 1, 1]);
+        assert_eq!(block_dims(4, 2), vec![2, 2]);
+        assert_eq!(block_dims(5, 2), vec![5, 1]);
+        assert_eq!(block_dims(10, 2), vec![2, 5]);
+        assert_eq!(block_dims(16, 2), vec![4, 4]);
+        assert_eq!(block_dims(200, 2), vec![20, 10]);
+        assert_eq!(block_dims(200, 3), vec![10, 10, 2]);
+        assert_eq!(block_dims(1000, 3), vec![10, 10, 10]);
+        assert_eq!(block_dims(2000, 3), vec![20, 10, 10]);
     }
 }
