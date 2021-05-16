@@ -35,6 +35,12 @@ impl MpiCommunicator {
     }
 }
 
+impl Default for MpiCommunicator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl comm::Communicator for MpiCommunicator {
     fn rank(&self) -> usize {
         unsafe {
@@ -60,7 +66,7 @@ impl comm::Communicator for MpiCommunicator {
         unsafe {
             let status = mpi::probe_tag(self.time_stamp as i32);
             let mut buffer = vec![0; status.count as usize];
-            mpi::recv(buffer.as_mut_ptr(), buffer.len() as i32, status.source, status.tag);
+            mpi::recv(buffer.as_mut_ptr(), status.count, status.source, status.tag);
             buffer
         }
     }
