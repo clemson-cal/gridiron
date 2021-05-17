@@ -7,12 +7,12 @@ use clap::{AppSettings, Clap};
 use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
 use gridiron::index_space::range2d;
-use gridiron::meshing::{self, GraphTopology};
+use gridiron::meshing::GraphTopology;
 use gridiron::message::{comm::Communicator, null::NullCommunicator, tcp};
+use gridiron::index_space::IndexSpace;
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
 use gridiron::thread_pool;
-use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Range;
 use std::thread;
@@ -129,46 +129,13 @@ fn mesh_rectangles(bs: usize, mesh: &Mesh) -> impl Iterator<Item = Rectangle<i64
         .map(move |(i, j)| (i * bs..(i + 1) * bs, j * bs..(j + 1) * bs))
 }
 
-#[allow(unused)]
-fn work_assignment(
-    bs: usize,
-    mesh: &Mesh,
-    comm: &impl Communicator,
-) -> HashMap<Rectangle<i64>, usize> {
-    // let block_dims = meshing::block_dims(comm.size(), 2);
-    // let bi = block_dims[0];
-    // let bj = block_dims[1];
-
-    use gridiron::rect_map::RectangleMap;
-    let edges_i: Vec<_> = std::iter::once(0)
-        .chain(meshing::partition(100, 8).into_iter().scan(0, |a, b| {
-            *a += b;
-            Some(*a)
-        }))
-        .collect();
-    let ranges_i = edges_i.windows(2).map(|s| s[0] as i64..s[1] as i64);
-
-    let edges_j: Vec<_> = std::iter::once(0)
-        .chain(meshing::partition(100, 8).into_iter().scan(0, |a, b| {
-            *a += b;
-            Some(*a)
-        }))
-        .collect();
-    let ranges_j = edges_j.windows(2).map(|s| s[0] as i64..s[1] as i64);
-
-    let subgrids: RectangleMap<_, _> = ranges_i
-            .map(move |di| ranges_j.clone().map(move |dj| (di.clone(), dj)))
-            .flatten()
-            .map(|rect| (rect, 0))
-            .collect();
-
-    let ni = mesh.size.0 / bs;
-    let nj = mesh.size.1 / bs;
-    let blocks_per_peer = (ni * nj) / comm.size();
-
-    mesh_rectangles(bs, mesh)
+fn work_assignment(mesh: &Mesh, comm: &impl Communicator) -> RectangleMap<i64, usize> {
+    mesh.index_space()
+        .tile(comm.size())
+        .into_iter()
+        .map(|space| space.into_rect())
         .enumerate()
-        .map(|(n, rect)| (rect, n / blocks_per_peer))
+        .map(|(index, rect)| (rect, index))
         .collect()
 }
 
@@ -180,23 +147,20 @@ enum Execution {
 }
 
 fn run(opts: Opts, mut comm: impl Communicator) {
-    // step 1: find the global mesh size: opts.grid_resolution
-    // step 2: find the total number of blocks: opts.num_blocks^2
-    // step 3: find the number of peers: comm.size()
-    // step 4: use meshing::block_dims to create a 2d array of peers
-    // step 5: map the 2d array of peers indexes (i, j) to rectangles
-    //         in the global index space
-    // step 6: create a shallow copy of the mesh, a rectangle map of
-    //         rectangles representing the grid blocks
-    // step 7: compute the adjacency list from the shallow mesh
-    // step 8:
-
     let code = CborCoder::<PatchUpdate>::new();
     let mesh = Mesh {
         area: (-1.0..1.0, -1.0..1.0),
         size: (opts.grid_resolution, opts.grid_resolution),
     };
-    let work = work_assignment(opts.block_size, &mesh, &comm);
+    let work = work_assignment(&mesh, &comm);
+    let work = |rect: &Rectangle<i64>| {
+        work
+            .query_point(IndexSpace::from(rect.clone()).start())
+            .next()
+            .unwrap()
+            .1
+            .clone()
+    };
     let State {
         mut iteration,
         mut time,
@@ -213,13 +177,9 @@ fn run(opts: Opts, mut comm: impl Communicator) {
 
     let mut task_list: Vec<_> = primitive
         .into_iter()
-        .filter(|patch| work[&patch.high_resolution_rect()] == comm.rank())
+        .filter(|patch| work(&patch.high_resolution_rect()) == comm.rank())
         .map(|patch| PatchUpdate::new(patch, mesh.clone(), dt, None, &edge_list))
         .collect();
-
-    if opts.grid_resolution.pow(2) % comm.size() != 0 {
-        panic!("the number of peers must divide the number of tasks");
-    }
 
     if opts.grid_resolution % opts.block_size != 0 {
         if comm.rank() == 0 {

@@ -33,6 +33,10 @@ impl Mesh {
     pub fn total_zones(&self) -> usize {
         self.size.0 * self.size.1
     }
+
+    pub fn index_space(&self) -> IndexSpace {
+        IndexSpace::new(0..self.size.0 as i64, 0..self.size.1 as i64)
+    }
 }
 
 /// A basic first-order update scheme, hard-coded for the 2D euler equations.
