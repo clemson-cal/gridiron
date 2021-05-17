@@ -6,8 +6,13 @@
 //! example is included in [`tcp::TcpCommunicator`]). The trait then provides
 //! default implementations for broadcast, reduce, and reduce-all operations.
 
-pub mod comm;
-pub mod mpi;
-pub mod null;
-pub mod tcp;
-pub mod util;
+mod comm;
+mod mpi;
+mod null;
+mod tcp;
+mod util;
+
+pub use comm::Communicator;
+pub use tcp::TcpCommunicator;
+pub use null::NullCommunicator;
+pub use mpi::MpiCommunicator;

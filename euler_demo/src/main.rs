@@ -8,7 +8,7 @@ use gridiron::automaton::{self, Automaton};
 use gridiron::coder::Coder;
 use gridiron::index_space::range2d;
 use gridiron::meshing::GraphTopology;
-use gridiron::message::{comm::Communicator, null::NullCommunicator, tcp};
+use gridiron::message::{Communicator, NullCommunicator, TcpCommunicator};
 use gridiron::index_space::IndexSpace;
 use gridiron::patch::Patch;
 use gridiron::rect_map::{Rectangle, RectangleMap};
@@ -270,7 +270,7 @@ fn main_tcp(opts: Opts) {
     let peers: Vec<_> = ranks.clone().map(|rank| peer(rank)).collect();
     let comms: Vec<_> = ranks
         .clone()
-        .map(|rank| tcp::TcpCommunicator::new(rank, peers.clone()))
+        .map(|rank| TcpCommunicator::new(rank, peers.clone()))
         .collect();
     let procs: Vec<_> = comms
         .into_iter()
@@ -292,7 +292,7 @@ fn main_mpi(opts: Opts) {
     unsafe {
         mpi::init();
     }
-    let comm = message::mpi::MpiCommunicator::new();
+    let comm = message::MpiCommunicator::new();
     run(opts, comm);
     unsafe {
         mpi::finalize();

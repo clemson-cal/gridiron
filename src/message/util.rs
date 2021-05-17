@@ -32,7 +32,7 @@ pub fn read_bytes_vec<R: Read>(stream: &mut R, size: usize) -> Vec<u8> {
 /// If any bytes can be read immediately from a stream, the read the given
 /// number of bytes from it, returning `Some(Vec<u8>)`. Otherwise, return
 /// `None`.
-pub fn read_bytes_vec_non_blocking<R: Read>(stream: &mut R, size: usize) -> Option<Vec<u8>> {
+pub fn _read_bytes_vec_non_blocking<R: Read>(stream: &mut R, size: usize) -> Option<Vec<u8>> {
     let mut buffer = vec![0; size];
     read_bytes_into_non_blocking(stream, &mut buffer).map(|_| buffer)
 }

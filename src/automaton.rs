@@ -24,8 +24,7 @@
 //! processes the entire task group at each fine stage.
 
 use crate::coder::{Coder, NullCoder};
-use crate::message::comm::Communicator;
-use crate::message::null::NullCommunicator;
+use crate::message::{Communicator, NullCommunicator};
 use core::hash::Hash;
 use std::collections::hash_map::{Entry, HashMap};
 
