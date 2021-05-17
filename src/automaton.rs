@@ -199,23 +199,23 @@ where
 /// Executes a group of compute tasks using a distributed communicator, and an
 /// optional pool of worker threads. If no pool is given, the executions are
 /// done synchronously.
-pub fn execute_comm<Comm, Code, I, A, K, V, M>(
+pub fn execute_comm<Comm, Code, Work, I, A, K, V, M>(
     comm: &mut Comm,
     code: &Code,
-    work: &HashMap<K, usize>,
+    work: &Work,
     pool: Option<&crate::thread_pool::ThreadPool>,
     flow: I,
 ) -> impl Iterator<Item = V>
 where
     Comm: Communicator,
     Code: Coder<Type = (A::Key, A::Message)>,
+    Work: Fn(&K) -> usize,
     I: IntoIterator<Item = A>,
     A: 'static + Send + Automaton<Key = K, Value = V, Message = M>,
     K: 'static + Hash + Eq,
     V: 'static + Send,
 {
     let (eligible_sink, eligible_source) = make_channels();
-    let work = |k: &K| work[k];
     let sink = |a: A| match pool {
         Some(pool) => {
             let eligible_sink = eligible_sink.clone();
