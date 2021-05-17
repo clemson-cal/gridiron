@@ -287,6 +287,8 @@ fn main_tcp(opts: Opts) {
 
 #[cfg(feature = "mpi")]
 fn main_mpi(opts: Opts) {
+    use gridiron::mpi;
+    use gridiron::message;
     unsafe {
         mpi::init();
     }
