@@ -173,6 +173,48 @@ pub fn block_dims(count: usize, num_dims: usize) -> Vec<usize> {
         .collect()
 }
 
+/// Equitably divide the given number of elements (`len`) into `num_parts`
+/// partitions, so that the sum of the partitions is `len`. The number of
+/// partitions must be less than or equal to the number of elements.
+pub fn partition(len: usize, num_parts: usize) -> Vec<usize> {
+    assert!(len >= num_parts);
+    let target_number = len / num_parts;
+    let remainder = len % num_parts;
+    (0..num_parts)
+        .map(|i| target_number + if i < remainder { 1 } else { 0 })
+        .collect()
+}
+
+/// Return a two-dimensional rectangular tiling of an index space. NOTE: this
+/// function might be made a member function of `IndexSpace`.
+pub fn tile(space: IndexSpace, num_parts: usize) -> Vec<Rectangle<i64>> {
+    let block_dims = block_dims(num_parts, 2);
+    let (bi, bj) = (block_dims[0], block_dims[1]);
+    let (si, sj) = space.start();
+    let (ni, nj) = space.dim();
+
+    let edges_i: Vec<_> = std::iter::once(0)
+        .chain(partition(ni, bi).into_iter().scan(si, |a, b| {
+            *a += b as i64;
+            Some(*a)
+        }))
+        .collect();
+    let ranges_i = edges_i.windows(2).map(|s| s[0]..s[1]);
+
+    let edges_j: Vec<_> = std::iter::once(0)
+        .chain(partition(nj, bj).into_iter().scan(sj, |a, b| {
+            *a += b as i64;
+            Some(*a)
+        }))
+        .collect();
+    let ranges_j = edges_j.windows(2).map(|s| s[0]..s[1]);
+
+    ranges_i
+        .map(move |di| ranges_j.clone().map(move |dj| (di.clone(), dj)))
+        .flatten()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,5 +254,12 @@ mod tests {
         assert_eq!(block_dims(200, 3), vec![10, 10, 2]);
         assert_eq!(block_dims(1000, 3), vec![10, 10, 10]);
         assert_eq!(block_dims(2000, 3), vec![20, 10, 10]);
+    }
+
+    #[test]
+    fn partition_works() {
+        assert_eq!(partition(5, 5), vec![1, 1, 1, 1, 1]);
+        assert_eq!(partition(10, 2), vec![5, 5]);
+        assert_eq!(partition(20, 6), vec![4, 4, 3, 3, 3, 3]);
     }
 }

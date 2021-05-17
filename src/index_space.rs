@@ -230,6 +230,14 @@ impl IndexSpace {
         }
     }
 
+    /// Return a consuming iterator which traverses the index space in
+    /// row-major order (C-like; the final index increases fastest).
+    #[allow(clippy::should_implement_trait)]
+    pub fn into_iter(self) -> impl Iterator<Item = (i64, i64)> {
+        let Self { di, dj } = self;
+        di.map(move |i| dj.clone().map(move |j| (i, j))).flatten()
+    }
+
     /// Return an iterator which traverses the index space in row-major order
     /// (C-like; the final index increases fastest).
     pub fn iter(&self) -> impl Iterator<Item = (i64, i64)> + '_ {
