@@ -40,7 +40,7 @@ impl IndexSpace {
         self.di.is_empty() || self.dj.is_empty()
     }
 
-    /// Return the number of indexes on each axis.
+    /// Returns the number of indexes on each axis.
     pub fn dim(&self) -> (usize, usize) {
         (
             (self.di.end - self.di.start) as usize,
@@ -48,23 +48,23 @@ impl IndexSpace {
         )
     }
 
-    /// Return the number of elements in this index space.
+    /// Returns the number of elements in this index space.
     pub fn len(&self) -> usize {
         let (l, m) = self.dim();
         l * m
     }
 
-    /// Return the minimum index (inclusive).
+    /// Returns the minimum index (inclusive).
     pub fn start(&self) -> (i64, i64) {
         (self.di.start, self.dj.start)
     }
 
-    /// Return the maximum index (exclusive).
+    /// Returns the maximum index (exclusive).
     pub fn end(&self) -> (i64, i64) {
         (self.di.end, self.dj.end)
     }
 
-    /// Return the index space as a rectangle reference (a tuple of `Range`
+    /// Returns the index space as a rectangle reference (a tuple of `Range`
     /// references).
     pub fn to_rect_ref(&self) -> (&Range<i64>, &Range<i64>) {
         (&self.di, &self.dj)
@@ -88,7 +88,7 @@ impl IndexSpace {
             && other.dj.end <= self.dj.end
     }
 
-    /// Return the overlapping region between two index spaces.
+    /// Returns the overlapping region between two index spaces.
     pub fn intersect<I: Into<Self>>(&self, other: I) -> Self {
         let other = other.into();
         let i0 = self.di.start.max(other.di.start);
@@ -193,7 +193,7 @@ impl IndexSpace {
         )
     }
 
-    /// Return the linear offset for the given index, in a row-major memory
+    /// Returns the linear offset for the given index, in a row-major memory
     /// buffer aligned with the start of this index space.
     pub fn row_major_offset(&self, index: (i64, i64)) -> usize {
         let i = (index.0 - self.di.start) as usize;
@@ -202,7 +202,7 @@ impl IndexSpace {
         i * m + j
     }
 
-    /// Return a memory region object for a buffer mapped to this index space.
+    /// Returns a memory region object for a buffer mapped to this index space.
     pub fn memory_region(&self) -> MemoryRegion {
         let start = (0, 0);
         let count = self.dim();
@@ -214,7 +214,7 @@ impl IndexSpace {
         }
     }
 
-    /// Return a memory region object corresponding to the selection of this
+    /// Returns a memory region object corresponding to the selection of this
     /// index space in the buffer allocated for another one.
     pub fn memory_region_in(&self, parent: Self) -> MemoryRegion {
         let start = (
@@ -230,7 +230,25 @@ impl IndexSpace {
         }
     }
 
-    /// Return a consuming iterator which traverses the index space in
+    /// Returns a sequence of `num_tiles` non-overlapping `IndexSpace` objects
+    /// with which cover this one.
+    pub fn tile(&self, num_tiles: usize) -> Vec<IndexSpace> {
+        let dims = block_dims(num_tiles, 2);
+        let ranges_i = subdivide(self.di.clone(), dims[0]);
+        let ranges_j = subdivide(self.dj.clone(), dims[1]);
+        ranges_i
+            .into_iter()
+            .map(move |di| {
+                ranges_j
+                    .clone()
+                    .into_iter()
+                    .map(move |dj| Self::new(di.clone(), dj))
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns a consuming iterator which traverses the index space in
     /// row-major order (C-like; the final index increases fastest).
     #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> impl Iterator<Item = (i64, i64)> {
@@ -238,7 +256,7 @@ impl IndexSpace {
         di.map(move |i| dj.clone().map(move |j| (i, j))).flatten()
     }
 
-    /// Return an iterator which traverses the index space in row-major order
+    /// Returns an iterator which traverses the index space in row-major order
     /// (C-like; the final index increases fastest).
     pub fn iter(&self) -> impl Iterator<Item = (i64, i64)> + '_ {
         self.di
@@ -272,6 +290,12 @@ impl IndexSpace {
 //         self.iter()
 //     }
 // }
+
+impl PartialEq for IndexSpace {
+    fn eq(&self, other: &Self) -> bool {
+        self.di == other.di && self.dj == other.dj
+    }
+}
 
 impl From<(Range<i64>, Range<i64>)> for IndexSpace {
     fn from(range: (Range<i64>, Range<i64>)) -> Self {
@@ -418,8 +442,104 @@ pub fn iter_slice_3d_v3(
     })
 }
 
+/// Computes the integer square root, `floor(sqrt(n))`, of an unsigned integer
+/// `n`. Based on [Newton's method][1].
+///
+/// [1]: https://en.wikipedia.org/wiki/Integer_square_root
+pub fn integer_square_root(n: usize) -> usize {
+    let mut x0 = n >> 1;
+
+    if x0 == 0 {
+        n
+    } else {
+        let mut x1 = (x0 + n / x0) >> 1;
+
+        while x1 < x0 {
+            x0 = x1;
+            x1 = (x0 + n / x0) >> 1;
+        }
+        x0
+    }
+}
+
+/// Find the prime factors of an unsigned integer. Based on Pollard’s Rho
+/// algorithm.
+pub fn prime_factors(mut n: usize) -> Vec<usize> {
+    let mut result = Vec::new();
+
+    while n % 2 == 0 {
+        result.push(2);
+        n /= 2
+    }
+    let mut i = 3;
+
+    while i <= integer_square_root(n) {
+        while n % i == 0 {
+            result.push(i);
+            n /= i
+        }
+        i += 2
+    }
+
+    if n > 2 {
+        result.push(n)
+    }
+    result
+}
+
+/// Factors a target number of total blocks (`count`) (say 200) into
+/// rectangular dimensions, (`[20, 10]` for `num_dims=2` or `[10, 10, 2]` for
+/// `num_dims=3`). In context, `count` will be the number of tasks in a
+/// calculation, and `num_dims` is the rank of the arrays. This function is
+/// like `MPI_Dims_create`.
+pub fn block_dims(count: usize, num_dims: usize) -> Vec<usize> {
+    let factors = prime_factors(count);
+    (0..num_dims)
+        .map(|dim| {
+            if factors.is_empty() {
+                1
+            } else {
+                factors[dim..]
+                    .chunks(num_dims)
+                    .map(|chunk| chunk[0])
+                    .product()
+            }
+        })
+        .collect()
+}
+
+/// Equitably divide the given number of elements (`len`) into `num_parts`
+/// partitions, so that the sum of the partitions is `len`. The number of
+/// partitions must be less than or equal to the number of elements.
+pub fn partition(len: usize, num_parts: usize) -> Vec<usize> {
+    assert!(len >= num_parts);
+    let target_number = len / num_parts;
+    let remainder = len % num_parts;
+    (0..num_parts)
+        .map(|i| target_number + if i < remainder { 1 } else { 0 })
+        .collect()
+}
+
+/// Equitably subdivide a range into a sequence of non-overlapping contiguous
+/// ranges. Panics if the range has negative length.
+pub fn subdivide(range: Range<i64>, num_parts: usize) -> Vec<Range<i64>> {
+    let len = (range.end - range.start) as usize;
+    let edges: Vec<_> = std::iter::once(range.start)
+        .chain(
+            partition(len, num_parts)
+                .into_iter()
+                .scan(range.start, |a, b| {
+                    *a += b as i64;
+                    Some(*a)
+                }),
+        )
+        .collect();
+    edges.windows(2).map(|s| s[0]..s[1]).collect()
+}
+
 #[cfg(test)]
 mod test {
+    use super::*;
 
     const NI: usize = 100;
     const NJ: usize = 100;
@@ -430,8 +550,7 @@ mod test {
     fn traversal_with_nested_iter_has_correct_length_v1() {
         let data = vec![1.0; NI * NJ * NK * NUM_FIELDS];
         assert_eq!(
-            super::iter_slice_3d_v1(&data, (5, 10, 15), (10, 10, 10), (NI, NJ, NK), NUM_FIELDS)
-                .count(),
+            iter_slice_3d_v1(&data, (5, 10, 15), (10, 10, 10), (NI, NJ, NK), NUM_FIELDS).count(),
             1000
         );
     }
@@ -440,9 +559,69 @@ mod test {
     fn traversal_with_nested_iter_has_correct_length_v2() {
         let data = vec![1.0; NI * NJ * NK * NUM_FIELDS];
         assert_eq!(
-            super::iter_slice_3d_v2(&data, (5, 10, 15), (10, 10, 10), (NI, NJ, NK), NUM_FIELDS)
-                .count(),
+            iter_slice_3d_v2(&data, (5, 10, 15), (10, 10, 10), (NI, NJ, NK), NUM_FIELDS).count(),
             1000
         );
+    }
+
+    #[test]
+    fn integer_square_root_works() {
+        assert_eq!(integer_square_root(0), 0);
+        assert_eq!(integer_square_root(1), 1);
+        assert_eq!(integer_square_root(2), 1);
+        assert_eq!(integer_square_root(4), 2);
+        assert_eq!(integer_square_root(35), 5);
+        assert_eq!(integer_square_root(36), 6);
+    }
+
+    #[test]
+    fn prime_factors_works() {
+        assert_eq!(prime_factors(1), vec![]);
+        assert_eq!(prime_factors(2), vec![2]);
+        assert_eq!(prime_factors(3), vec![3]);
+        assert_eq!(prime_factors(4), vec![2, 2]);
+        assert_eq!(prime_factors(5), vec![5]);
+        assert_eq!(prime_factors(6), vec![2, 3]);
+        assert_eq!(prime_factors(9), vec![3, 3]);
+        assert_eq!(prime_factors(12), vec![2, 2, 3]);
+        assert_eq!(prime_factors(100), vec![2, 2, 5, 5]);
+    }
+
+    #[test]
+    fn block_dims_works() {
+        assert_eq!(block_dims(1, 2), vec![1, 1]);
+        assert_eq!(block_dims(1, 3), vec![1, 1, 1]);
+        assert_eq!(block_dims(4, 2), vec![2, 2]);
+        assert_eq!(block_dims(5, 2), vec![5, 1]);
+        assert_eq!(block_dims(10, 2), vec![2, 5]);
+        assert_eq!(block_dims(16, 2), vec![4, 4]);
+        assert_eq!(block_dims(200, 2), vec![20, 10]);
+        assert_eq!(block_dims(200, 3), vec![10, 10, 2]);
+        assert_eq!(block_dims(1000, 3), vec![10, 10, 10]);
+        assert_eq!(block_dims(2000, 3), vec![20, 10, 10]);
+    }
+
+    #[test]
+    fn partition_works() {
+        assert_eq!(partition(5, 5), vec![1, 1, 1, 1, 1]);
+        assert_eq!(partition(10, 2), vec![5, 5]);
+        assert_eq!(partition(20, 6), vec![4, 4, 3, 3, 3, 3]);
+    }
+
+    #[test]
+    fn subdivide_works() {
+        assert_eq!(subdivide(0..10, 2), vec![0..5, 5..10]);
+        assert_eq!(subdivide(0..10, 3), vec![0..4, 4..7, 7..10]);
+        assert_eq!(subdivide(-5..5, 3), vec![-5..-1, -1..2, 2..5]);
+    }
+
+    #[test]
+    fn tile_works() {
+        let space = IndexSpace::new(0..10, 0..10);
+        assert_eq!(space.tile(4), vec![
+            IndexSpace::new(0..5, 0..5),
+            IndexSpace::new(0..5, 5..10),
+            IndexSpace::new(5..10, 0..5),
+            IndexSpace::new(5..10, 5..10)]);
     }
 }
