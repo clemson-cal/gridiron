@@ -108,14 +108,14 @@ where
 {
     type Type = (K, M);
 
-    fn encode(&self, inst: Self::Type) -> Vec<u8> {
+    fn encode(&self, inst: &Self::Type) -> Vec<u8> {
         let mut buffer = Vec::new();
         ciborium::ser::into_writer(&inst, &mut buffer).unwrap();
         buffer
     }
 
-    fn decode(&self, data: Vec<u8>) -> Self::Type {
-        ciborium::de::from_reader(data.as_slice()).unwrap()
+    fn decode(&self, data: &[u8]) -> Self::Type {
+        ciborium::de::from_reader(data).unwrap()
     }
 }
 

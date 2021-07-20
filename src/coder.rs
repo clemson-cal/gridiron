@@ -5,10 +5,10 @@ pub trait Coder {
     type Type;
 
     /// Consume an instance of the encodable type and convert it to bytes.
-    fn encode(&self, inst: Self::Type) -> Vec<u8>;
+    fn encode(&self, inst: &Self::Type) -> Vec<u8>;
 
     /// Consume a buffer of bytes and decode it to the decodable type.
-    fn decode(&self, data: Vec<u8>) -> Self::Type;
+    fn decode(&self, data: &[u8]) -> Self::Type;
 }
 
 /// Shim implementation of `Coder`. Calling `encode` or `decode` results in
@@ -29,11 +29,11 @@ impl<T> Coder for NullCoder<T>
 {
     type Type = T;
 
-    fn encode(&self, _: Self::Type) -> Vec<u8> {
+    fn encode(&self, _: &Self::Type) -> Vec<u8> {
         unimplemented!()
     }
 
-    fn decode(&self, _: Vec<u8>) -> Self::Type {
+    fn decode(&self, _: &[u8]) -> Self::Type {
         unimplemented!()
     }
 }

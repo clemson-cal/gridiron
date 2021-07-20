@@ -269,7 +269,7 @@ fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
                     }
                 }
             } else {
-                comm.send(work(&dest), code.encode((dest, data)))
+                comm.send(work(&dest), code.encode(&(dest, data)))
             }
         }
 
@@ -292,7 +292,7 @@ fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
 
     // Receive messages from peers until all tasks have been evaluated.
     while !seen.is_empty() {
-        let (dest, data) = code.decode(comm.recv());
+        let (dest, data) = code.decode(&comm.recv());
         match seen.entry(dest) {
             Entry::Occupied(mut entry) => {
                 if let Status::Eligible = entry.get_mut().receive(data) {
