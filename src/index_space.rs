@@ -24,7 +24,7 @@ pub struct IndexSpace {
 }
 
 impl IndexSpace {
-    /// Construct a new index space from the given ranges. The ranges are
+    /// Constructs a new index space from the given ranges. The ranges are
     /// allowed to be empty but this function panics if either has negative
     /// length.
     pub fn new(di: Range<i64>, dj: Range<i64>) -> Self {
@@ -35,7 +35,7 @@ impl IndexSpace {
         Self { di, dj }
     }
 
-    /// Determine whether this index space is empty.
+    /// Determines whether this index space is empty.
     pub fn is_empty(&self) -> bool {
         self.di.is_empty() || self.dj.is_empty()
     }
@@ -70,17 +70,17 @@ impl IndexSpace {
         (&self.di, &self.dj)
     }
 
-    /// Convert this index space as a rectangle (a tuple of `Range` objects).
+    /// Converts this index space as a rectangle (a tuple of `Range` objects).
     pub fn into_rect(self) -> (Range<i64>, Range<i64>) {
         (self.di, self.dj)
     }
 
-    /// Determine whether this index space contains the given index.
+    /// Determines whether this index space contains the given index.
     pub fn contains(&self, index: (i64, i64)) -> bool {
         self.di.contains(&index.0) && self.dj.contains(&index.1)
     }
 
-    /// Determine whether another index space is a subset of this one.
+    /// Determines whether another index space is a subset of this one.
     pub fn contains_space(&self, other: &Self) -> bool {
         other.di.start >= self.di.start
             && other.di.end <= self.di.end
@@ -98,7 +98,7 @@ impl IndexSpace {
         Self::new(i0..i1, j0..j1)
     }
 
-    /// Extend this index space by the given number of elements on both sides
+    /// Extends this index space by the given number of elements on both sides
     /// of each axis.
     pub fn extend_all(&self, delta: i64) -> Self {
         Self::new(
@@ -107,7 +107,7 @@ impl IndexSpace {
         )
     }
 
-    /// Extend the elements at both ends of the given axis by a certain
+    /// Extends the elements at both ends of the given axis by a certain
     /// amount.
     pub fn extend(&self, delta: i64, axis: Axis) -> Self {
         match axis {
@@ -116,8 +116,8 @@ impl IndexSpace {
         }
     }
 
-    /// Extend just the lower elements of this index space by a certain amount
-    /// on the given axis.
+    /// Extends just the lower elements of this index space by a certain
+    /// amount on the given axis.
     pub fn extend_lower(&self, delta: i64, axis: Axis) -> Self {
         match axis {
             Axis::I => Self::new(self.di.start - delta..self.di.end, self.dj.clone()),
@@ -125,8 +125,8 @@ impl IndexSpace {
         }
     }
 
-    /// Extend just the upper elements of this index space by a certain amount on
-    /// the given axis.
+    /// Extends just the upper elements of this index space by a certain
+    /// amount on the given axis.
     pub fn extend_upper(&self, delta: i64, axis: Axis) -> Self {
         match axis {
             Axis::I => Self::new(self.di.start..self.di.end + delta, self.dj.clone()),
@@ -134,8 +134,8 @@ impl IndexSpace {
         }
     }
 
-    /// Trim this index space by the given number of elements on both sides of
-    /// each axis.
+    /// Trims this index space by the given number of elements on both sides
+    /// of each axis.
     pub fn trim_all(&self, delta: i64) -> Self {
         self.extend_all(-delta)
     }
@@ -145,19 +145,19 @@ impl IndexSpace {
         self.extend(-delta, axis)
     }
 
-    /// Trim just the lower elements of this index space by a certain amount on
-    /// the given axis.
+    /// Trims just the lower elements of this index space by a certain amount
+    /// on the given axis.
     pub fn trim_lower(&self, delta: i64, axis: Axis) -> Self {
         self.extend_lower(-delta, axis)
     }
 
-    /// Trim just the upper elements of this index space by a certain amount on
-    /// the given axis.
+    /// Trims just the upper elements of this index space by a certain amount
+    /// on the given axis.
     pub fn trim_upper(&self, delta: i64, axis: Axis) -> Self {
         self.extend_upper(-delta, axis)
     }
 
-    /// Shift this index space by some amount on the given axis. The shape is
+    /// Shifts this index space by some amount on the given axis. The shape is
     /// unchanged.
     pub fn translate(&self, delta: i64, axis: Axis) -> Self {
         match axis {
@@ -166,7 +166,7 @@ impl IndexSpace {
         }
     }
 
-    /// Increase the size of this index space by the given factor.
+    /// Increases the size of this index space by the given factor.
     pub fn refine_by(&self, factor: u32) -> Self {
         let factor = factor as i64;
         Self::new(
@@ -175,7 +175,7 @@ impl IndexSpace {
         )
     }
 
-    /// Increase the size of this index space by the given factor.
+    /// Increases the size of this index space by the given factor.
     pub fn coarsen_by(&self, factor: u32) -> Self {
         let factor = factor as i64;
 
@@ -618,10 +618,14 @@ mod test {
     #[test]
     fn tile_works() {
         let space = IndexSpace::new(0..10, 0..10);
-        assert_eq!(space.tile(4), vec![
-            IndexSpace::new(0..5, 0..5),
-            IndexSpace::new(0..5, 5..10),
-            IndexSpace::new(5..10, 0..5),
-            IndexSpace::new(5..10, 5..10)]);
+        assert_eq!(
+            space.tile(4),
+            vec![
+                IndexSpace::new(0..5, 0..5),
+                IndexSpace::new(0..5, 5..10),
+                IndexSpace::new(5..10, 0..5),
+                IndexSpace::new(5..10, 5..10)
+            ]
+        );
     }
 }

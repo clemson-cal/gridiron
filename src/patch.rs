@@ -213,7 +213,7 @@ impl Patch {
     /// Samples all the fields in this patch at the given index and returns
     /// the result as a fixed-length array. The array size must be less than
     /// or equal to the number of fields.
-    pub fn sample_vector<const NUM_FIELDS: usize>(
+    pub fn sample_array<const NUM_FIELDS: usize>(
         &self,
         level: u32,
         index: (i64, i64),
