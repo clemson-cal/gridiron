@@ -127,18 +127,18 @@ impl Patch {
         }
     }
 
-    // pub fn extract_from(source: &Patch, selection: IndexSpace) -> Self {
-    //     Self::from_slice_function(
-    //         source.level,
-    //         selection,
-    //         source.num_fields,
-    //         |index, slice| {
-    //             if source.index_space().contains(index) {
-    //                 slice.clone_from_slice(source.get_slice(index))
-    //             }
-    //         },
-    //     )
-    // }
+    pub fn extract_from(source: &Patch, selection: IndexSpace) -> Self {
+        Self::from_slice_function(
+            source.level,
+            selection,
+            source.num_fields,
+            |index, slice| {
+                if source.index_space().contains(index) {
+                    slice.clone_from_slice(source.get_slice(index))
+                }
+            },
+        )
+    }
 
     pub fn level(&self) -> u32 {
         self.level
