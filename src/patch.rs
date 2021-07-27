@@ -36,7 +36,7 @@ pub enum MeshLocation {
 /// array of data, which is in general at a coarser level of granularity than
 /// the HRIS; each cell in the backing array stands for (2^level)^rank cells
 /// in the HRIS. The HRIS is at level 0.
-/// 
+///
 /// The patch can be sampled at different granularity levels. If the sampling
 /// level is finer than the patch granularity, then sub-cell sampling is
 /// employed, either with piecewise constant or multi-linear interpolation. If
@@ -61,7 +61,6 @@ pub struct Patch {
 }
 
 impl Patch {
- 
     /// Creates a new empty patch.
     pub fn new() -> Self {
         Self {
@@ -128,18 +127,18 @@ impl Patch {
         }
     }
 
-    pub fn extract_from(source: &Patch, selection: IndexSpace) -> Self {
-        Self::from_slice_function(
-            source.level,
-            selection,
-            source.num_fields,
-            |index, slice| {
-                if source.index_space().contains(index) {
-                    slice.clone_from_slice(source.get_slice(index))
-                }
-            },
-        )
-    }
+    // pub fn extract_from(source: &Patch, selection: IndexSpace) -> Self {
+    //     Self::from_slice_function(
+    //         source.level,
+    //         selection,
+    //         source.num_fields,
+    //         |index, slice| {
+    //             if source.index_space().contains(index) {
+    //                 slice.clone_from_slice(source.get_slice(index))
+    //             }
+    //         },
+    //     )
+    // }
 
     pub fn level(&self) -> u32 {
         self.level
@@ -158,14 +157,18 @@ impl Patch {
     }
 
     pub fn select(&self, subspace: IndexSpace) -> impl Iterator<Item = &'_ [f64]> {
-        subspace.memory_region_in(self.index_space()).iter_slice(&self.data, self.num_fields)
+        subspace
+            .memory_region_in(self.index_space())
+            .iter_slice(&self.data, self.num_fields)
     }
 
     pub fn select_mut(&mut self, subspace: IndexSpace) -> impl Iterator<Item = &'_ mut [f64]> {
-        subspace.memory_region_in(self.index_space()).iter_slice_mut(&mut self.data, self.num_fields)
+        subspace
+            .memory_region_in(self.index_space())
+            .iter_slice_mut(&mut self.data, self.num_fields)
     }
 
-    /// Return this patch's rectangle.
+    /// Returns this patch's rectangle.
     pub fn local_rect(&self) -> &Rectangle<i64> {
         &self.rect
     }
@@ -301,6 +304,19 @@ impl Patch {
             .iter_slice(&self.data, self.num_fields)
             .zip(target_region.iter_slice_mut(&mut target.data, self.num_fields))
             .for_each(|x| f(x.0, x.1))
+    }
+
+    /// Copies values from this patch into another one. The two patches must
+    /// be on the same level and have the same number of fields, but they do
+    /// not need to have the same index space. Only the elements at the
+    /// overlapping part of the index spaces are mapped; the remaining part of
+    /// the target patch is unchanged.
+    pub fn copy_into(&self, target: &mut Self) {
+        self.map_into(target, |src, dst| {
+            for (s, d) in src.iter().zip(dst) {
+                *d = *s;
+            }
+        })
     }
 
     pub fn map<F>(&self, f: F) -> Self
