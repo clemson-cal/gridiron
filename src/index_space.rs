@@ -315,9 +315,24 @@ impl<'a> From<(&'a Range<i64>, &'a Range<i64>)> for IndexSpace {
     }
 }
 
+impl<'a> From<&'a (Range<i64>, Range<i64>)> for IndexSpace {
+    fn from(range: &'a (Range<i64>, Range<i64>)) -> Self {
+        Self {
+            di: range.0.clone(),
+            dj: range.1.clone(),
+        }
+    }
+}
+
 impl From<IndexSpace> for (Range<i64>, Range<i64>) {
     fn from(space: IndexSpace) -> Self {
         (space.di, space.dj)
+    }
+}
+
+impl<'a> From<&'a IndexSpace> for (Range<i64>, Range<i64>) {
+    fn from(space: &'a IndexSpace) -> Self {
+        (space.di.clone(), space.dj.clone())
     }
 }
 
