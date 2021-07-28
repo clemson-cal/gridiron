@@ -107,6 +107,12 @@ pub trait Automaton {
     fn worker_hint(&self) -> Option<usize> {
         None
     }
+
+    /// This method may be implemented to indicate that this task is eligible
+    /// immediately; it does not receive any messages.
+    fn independent(&self) -> bool {
+        false
+    }
 }
 
 /// Execute a group of tasks in serial.
@@ -282,7 +288,7 @@ fn coordinate<Comm, Code, Work, Sink, I, A, K, V>(
                 messages.into_iter().any(|m| a.receive(m).is_eligible())
             });
 
-        if eligible {
+        if eligible || a.independent() {
             sink(a)
         } else {
             seen.insert(a.key(), a);
