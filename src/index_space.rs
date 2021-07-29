@@ -344,9 +344,9 @@ pub fn range2d(di: Range<i64>, dj: Range<i64>) -> IndexSpace {
 /// A 2D memory region within a contiguous buffer.
 #[derive(Debug)]
 pub struct MemoryRegion {
-    start: (usize, usize),
-    count: (usize, usize),
-    shape: (usize, usize),
+    pub start: (usize, usize),
+    pub count: (usize, usize),
+    pub shape: (usize, usize),
 }
 
 impl MemoryRegion {
