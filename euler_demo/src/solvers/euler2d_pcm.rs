@@ -149,7 +149,8 @@ impl Automaton for PatchUpdate {
                 let overlap = IndexSpace::from(rect.clone())
                     .extend_all(NUM_GUARD * (1 << level))
                     .coarsen_by(1 << self.level)
-                    .intersect(self.index_space.clone());
+                    .intersect(self.index_space.clone())
+                    .expect("patches do not overlap");
                 (rect, self.extended_primitive.extract(overlap))
             })
             .collect()

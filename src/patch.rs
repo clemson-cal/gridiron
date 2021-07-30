@@ -292,7 +292,8 @@ impl Patch {
     /// on the same level and have the same number of fields, but they do not
     /// need to have the same index space. Only the elements at the
     /// overlapping part of the index spaces are mapped; the remaining part of
-    /// the target patch is unchanged.
+    /// the target patch is unchanged. This method panics if the target space
+    /// does not overlap this one.
     pub fn map_into<F>(&self, target: &mut Self, f: F)
     where
         F: Fn(&[f64], &mut [f64]),
@@ -300,7 +301,10 @@ impl Patch {
         assert!(self.level == target.level);
         assert!(self.num_fields == target.num_fields);
 
-        let overlap_space = self.index_space().intersect(target.index_space());
+        let overlap_space = self
+            .index_space()
+            .intersect(target.index_space())
+            .expect("patches do not overlap");
         let source_region = overlap_space.memory_region_in(self.index_space());
         let target_region = overlap_space.memory_region_in(target.index_space());
 

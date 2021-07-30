@@ -29,7 +29,7 @@ impl IndexSpace {
     /// length.
     pub fn new(di: Range<i64>, dj: Range<i64>) -> Self {
         assert! {
-            di.start <= di.end && dj.start < dj.end,
+            di.start <= di.end && dj.start <= dj.end,
             "index space has negative volume"
         };
         Self { di, dj }
@@ -89,13 +89,18 @@ impl IndexSpace {
     }
 
     /// Returns the overlapping region between two index spaces.
-    pub fn intersect<I: Into<Self>>(&self, other: I) -> Self {
+    pub fn intersect<I: Into<Self>>(&self, other: I) -> Option<Self> {
         let other = other.into();
         let i0 = self.di.start.max(other.di.start);
         let j0 = self.dj.start.max(other.dj.start);
         let i1 = self.di.end.min(other.di.end);
         let j1 = self.dj.end.min(other.dj.end);
-        Self::new(i0..i1, j0..j1)
+
+        if i0 <= i1 && j0 <= j1 {
+            Some(Self::new(i0..i1, j0..j1))
+        } else {
+            None
+        }
     }
 
     /// Extends this index space by the given number of elements on both sides
