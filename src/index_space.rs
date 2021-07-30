@@ -157,6 +157,24 @@ impl IndexSpace {
         self.extend_upper(-delta, axis)
     }
 
+    /// Remove all but the given number of elements from the upper part of the
+    /// given axis.
+    pub fn keep_lower(&self, count: i64, axis: Axis) -> Self {
+        match axis {
+            Axis::I => Self::new(self.di.start..self.di.start + count, self.dj.clone()),
+            Axis::J => Self::new(self.di.clone(), self.dj.start..self.dj.start + count),
+        }
+    }
+
+    /// Remove all but the given number of elements from the lower part of the
+    /// given axis.
+    pub fn keep_upper(&self, count: i64, axis: Axis) -> Self {
+        match axis {
+            Axis::I => Self::new(self.di.end - count..self.di.end, self.dj.clone()),
+            Axis::J => Self::new(self.di.clone(), self.dj.end - count..self.dj.end),
+        }
+    }
+
     /// Shifts this index space by some amount on the given axis. The shape is
     /// unchanged.
     pub fn translate(&self, delta: i64, axis: Axis) -> Self {
