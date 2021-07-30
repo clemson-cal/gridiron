@@ -215,8 +215,10 @@ impl IndexSpace {
     }
 
     /// Returns a memory region object corresponding to the selection of this
-    /// index space in the buffer allocated for another one.
+    /// index space in the buffer allocated for another one. This function
+    /// will panic if this index space is not a subset of the parent.
     pub fn memory_region_in(&self, parent: Self) -> MemoryRegion {
+        assert!(parent.contains_space(self), "memory region would be out-of-bounds");
         let start = (
             (self.di.start - parent.di.start) as usize,
             (self.dj.start - parent.dj.start) as usize,
