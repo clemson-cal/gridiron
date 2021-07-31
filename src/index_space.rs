@@ -71,8 +71,8 @@ impl IndexSpace {
     }
 
     /// Converts this index space as a rectangle (a tuple of `Range` objects).
-    pub fn into_rect(self) -> (Range<i64>, Range<i64>) {
-        (self.di, self.dj)
+    pub fn to_rect(&self) -> (Range<i64>, Range<i64>) {
+        (self.di.clone(), self.dj.clone())
     }
 
     /// Determines whether this index space contains the given index.
@@ -89,8 +89,7 @@ impl IndexSpace {
     }
 
     /// Returns the overlapping region between two index spaces.
-    pub fn intersect<I: Into<Self>>(&self, other: I) -> Option<Self> {
-        let other = other.into();
+    pub fn intersect(&self, other: &IndexSpace) -> Option<Self> {
         let i0 = self.di.start.max(other.di.start);
         let j0 = self.dj.start.max(other.dj.start);
         let i1 = self.di.end.min(other.di.end);
@@ -240,7 +239,7 @@ impl IndexSpace {
     /// Returns a memory region object corresponding to the selection of this
     /// index space in the buffer allocated for another one. This function
     /// will panic if this index space is not a subset of the parent.
-    pub fn memory_region_in(&self, parent: Self) -> MemoryRegion {
+    pub fn memory_region_in(&self, parent: &Self) -> MemoryRegion {
         assert!(parent.contains_space(self), "memory region would be out-of-bounds");
         let start = (
             (self.di.start - parent.di.start) as usize,

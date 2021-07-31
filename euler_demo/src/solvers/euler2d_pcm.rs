@@ -138,7 +138,7 @@ impl Automaton for PatchUpdate {
     type Value = Self;
 
     fn key(&self) -> Self::Key {
-        self.index_space.refine_by(1 << self.level).into_rect()
+        self.index_space.refine_by(1 << self.level).to_rect()
     }
 
     fn messages(&self) -> Vec<(Self::Key, Self::Message)> {
@@ -149,7 +149,7 @@ impl Automaton for PatchUpdate {
                 let overlap = IndexSpace::from(rect.clone())
                     .extend_all(NUM_GUARD * (1 << level))
                     .coarsen_by(1 << self.level)
-                    .intersect(self.index_space.clone())
+                    .intersect(&self.index_space)
                     .expect("patches do not overlap");
                 (rect, self.extended_primitive.extract(overlap))
             })

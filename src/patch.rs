@@ -162,13 +162,13 @@ impl Patch {
 
     pub fn select(&self, subspace: IndexSpace) -> impl Iterator<Item = &'_ [f64]> {
         subspace
-            .memory_region_in(self.index_space())
+            .memory_region_in(&self.index_space())
             .iter_slice(&self.data, self.num_fields)
     }
 
     pub fn select_mut(&mut self, subspace: IndexSpace) -> impl Iterator<Item = &'_ mut [f64]> {
         subspace
-            .memory_region_in(self.index_space())
+            .memory_region_in(&self.index_space())
             .iter_slice_mut(&mut self.data, self.num_fields)
     }
 
@@ -303,10 +303,10 @@ impl Patch {
 
         let overlap_space = self
             .index_space()
-            .intersect(target.index_space())
+            .intersect(&target.index_space())
             .expect("patches do not overlap");
-        let source_region = overlap_space.memory_region_in(self.index_space());
-        let target_region = overlap_space.memory_region_in(target.index_space());
+        let source_region = overlap_space.memory_region_in(&self.index_space());
+        let target_region = overlap_space.memory_region_in(&target.index_space());
 
         source_region
             .iter_slice(&self.data, self.num_fields)

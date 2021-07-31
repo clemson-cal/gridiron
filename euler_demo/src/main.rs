@@ -133,7 +133,7 @@ fn work_assignment(mesh: &Mesh, comm: &impl Communicator) -> RectangleMap<i64, u
     mesh.index_space()
         .tile(comm.size())
         .into_iter()
-        .map(|space| space.into_rect())
+        .map(|space| space.to_rect())
         .enumerate()
         .map(|(index, rect)| (rect, index))
         .collect()
